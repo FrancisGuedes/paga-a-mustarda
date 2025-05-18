@@ -1,0 +1,218 @@
+// src/context/AuthContext.tsx
+import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import auth, { FirebaseAuthTypes } from '@react-native-firebase/auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Alert } from 'react-native';
+// Para Google Sign-In com @react-native-google-signin/google-signin (requer configuração nativa)
+// import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
+
+// GoogleSignin.configure({
+//   webClientId: 'SEU_WEB_CLIENT_ID_DO_FIREBASE_CONSOLE_PARA_GOOGLE_SIGNIN', // Obtenha da consola Firebase
+// });
+
+
+// Definição do tipo para o utilizador
+// Pode expandir isto conforme necessário
+export interface User extends FirebaseAuthTypes.User {
+  // Pode adicionar campos personalizados se os guardar separadamente no Firestore, por exemplo
+  // customUsername?: string;
+}
+
+// Definição do tipo para o estado da autenticação
+export interface AuthState {
+  user: User | null;
+  isLoading: boolean; // Para o estado inicial de carregamento da sessão e durante operações
+  error: string | null; // Para mensagens de erro
+}
+
+// Definição do tipo para o valor do contexto
+interface AuthContextProps {
+  auth: AuthState;
+  // As funções retornam Promises para que possa usar .then() ou await nelas
+  login: (email: string, password: string) => Promise<void>;
+  loginWithGoogle: () => Promise<void>;
+  register: (email: string, password: string, displayName?: string) => Promise<void>;
+  logout: () => Promise<void>;
+}
+
+const AuthContext = createContext<AuthContextProps | undefined>(undefined);
+
+const USER_SESSION_KEY = 'paga_a_mostarda_user_session';
+
+export const AuthProvider = ({ children }: { children: ReactNode }) => {
+  const [authInternal, setAuthInternal] = useState<AuthState>({
+    user: null,
+    isLoading: true, // Começa como true para verificar a sessão
+    error: null,
+  });
+
+  // Listener para mudanças no estado de autenticação do Firebase
+  // e para carregar a sessão inicial
+  useEffect(() => {
+    const tryLoadStoredSession = async () => {
+      try {
+        const storedUserJson = await AsyncStorage.getItem(USER_SESSION_KEY);
+        if (storedUserJson) {
+          const storedUser = JSON.parse(storedUserJson) as User;
+          // Poderia verificar se o token do Firebase ainda é válido aqui se guardasse mais info
+          setAuthInternal({ user: storedUser, isLoading: false, error: null });
+        } else {
+          setAuthInternal({ user: null, isLoading: false, error: null });
+        }
+      } catch (e) {
+        console.error("Falha ao carregar sessão do AsyncStorage", e);
+        setAuthInternal({ user: null, isLoading: false, error: null }); // Continua sem utilizador
+      }
+    };
+
+    // Tenta carregar a sessão primeiro (para um arranque mais rápido da UI se já logado)
+    tryLoadStoredSession();
+
+    const subscriber = auth().onAuthStateChanged(async (firebaseUser) => {
+      if (firebaseUser) {
+        const userToStore: User = { ...firebaseUser.toJSON() } as User; // Converte para um objeto serializável
+        await AsyncStorage.setItem(USER_SESSION_KEY, JSON.stringify(userToStore));
+        setAuthInternal({ user: userToStore, isLoading: false, error: null });
+      } else {
+        await AsyncStorage.removeItem(USER_SESSION_KEY);
+        setAuthInternal({ user: null, isLoading: false, error: null });
+      }
+    });
+
+    return subscriber; // Unsubscribe ao desmontar
+  }, []);
+
+
+  const login = async (email: string, password: string) => {
+    setAuthInternal(prev => ({ ...prev, isLoading: true, error: null }));
+    try {
+      await auth().signInWithEmailAndPassword(email, password);
+      // O listener onAuthStateChanged tratará de atualizar o estado e o AsyncStorage
+      Alert.alert('Sucesso', 'Login efetuado com sucesso!');
+      // A navegação é geralmente tratada no App.tsx com base na mudança do estado 'user'
+    } catch (error: any) {
+      console.error('Erro de Login:', error);
+      let errorMessage = 'Falha no login. Verifique as suas credenciais.';
+      if (error.code) {
+        switch (error.code) {
+          case 'auth/invalid-email':
+            errorMessage = 'O formato do email é inválido.';
+            break;
+          case 'auth/user-disabled':
+            errorMessage = 'Esta conta de utilizador foi desativada.';
+            break;
+          case 'auth/user-not-found':
+          case 'auth/wrong-password':
+          case 'auth/invalid-credential':
+            errorMessage = 'Email ou password incorretos.';
+            break;
+          default:
+            errorMessage = 'Ocorreu um erro inesperado ao fazer login.';
+        }
+      }
+      setAuthInternal(prev => ({ ...prev, isLoading: false, error: errorMessage }));
+      Alert.alert('Erro de Login', errorMessage);
+      throw error; // Relança o erro para que o ecrã de login possa reagir se necessário
+    }
+  };
+
+  const loginWithGoogle = async () => {
+    setAuthInternal(prev => ({ ...prev, isLoading: true, error: null }));
+    try {
+      Alert.alert('Login com Google', 'Funcionalidade de login com Google ainda não implementada neste exemplo.');
+      // Implementação real com @react-native-google-signin/google-signin:
+      // await GoogleSignin.hasPlayServices();
+      // const { idToken } = await GoogleSignin.signIn();
+      // const googleCredential = auth.GoogleAuthProvider.credential(idToken);
+      // await auth().signInWithCredential(googleCredential);
+      // O listener onAuthStateChanged tratará do resto.
+      // Por agora, simulamos um atraso e depois cancelamos o loading.
+      setTimeout(() => {
+        setAuthInternal(prev => ({ ...prev, isLoading: false, error: "Login com Google não finalizado." }));
+      }, 1500);
+
+    } catch (error: any) {
+      console.error('Erro de Login com Google:', error);
+      // if (error.code === statusCodes.SIGN_IN_CANCELLED) {
+      //   // utilizador cancelou o fluxo de login
+      // } else if (error.code === statusCodes.IN_PROGRESS) {
+      //   // operação (ex: login) já está em progresso
+      // } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+      //   // play services não disponíveis ou desatualizados
+      // } else {
+      //   // algum outro erro
+      // }
+      const errorMessage = 'Falha no login com Google.';
+      setAuthInternal(prev => ({ ...prev, isLoading: false, error: errorMessage }));
+      Alert.alert('Erro', errorMessage);
+      throw error;
+    }
+  };
+
+  const register = async (email: string, password: string, displayName?: string) => {
+    setAuthInternal(prev => ({ ...prev, isLoading: true, error: null }));
+    try {
+      const userCredential = await auth().createUserWithEmailAndPassword(email, password);
+      if (userCredential.user && displayName) {
+        await userCredential.user.updateProfile({ displayName });
+        // O Firebase Auth pode demorar um pouco a propagar o updateProfile.
+        // O listener onAuthStateChanged pode apanhar o utilizador sem o displayName imediatamente.
+        // Para uma UI mais responsiva, pode atualizar o estado localmente aqui também,
+        // ou recarregar o utilizador.
+      }
+      // O listener onAuthStateChanged tratará de atualizar o estado e o AsyncStorage
+      Alert.alert('Sucesso', 'Conta registada com sucesso!');
+    } catch (error: any) {
+      console.error('Erro de Registo:', error);
+      let errorMessage = 'Falha no registo.';
+      if (error.code) {
+        switch (error.code) {
+          case 'auth/email-already-in-use':
+            errorMessage = 'Este endereço de email já está em uso.';
+            break;
+          case 'auth/invalid-email':
+            errorMessage = 'O formato do email é inválido.';
+            break;
+          case 'auth/weak-password':
+            errorMessage = 'A password é demasiado fraca.';
+            break;
+          default:
+            errorMessage = 'Ocorreu um erro inesperado ao registar.';
+        }
+      }
+      setAuthInternal(prev => ({ ...prev, isLoading: false, error: errorMessage }));
+      Alert.alert('Erro de Registo', errorMessage);
+      throw error;
+    }
+  };
+
+  const logout = async () => {
+    setAuthInternal(prev => ({ ...prev, isLoading: true, error: null }));
+    try {
+      await auth().signOut();
+      // O listener onAuthStateChanged tratará de limpar o estado e o AsyncStorage
+      Alert.alert('Sucesso', 'Logout efetuado com sucesso!');
+    } catch (error: any) {
+      console.error('Erro de Logout:', error);
+      const errorMessage = 'Falha ao fazer logout.';
+      setAuthInternal(prev => ({ ...prev, isLoading: false, error: errorMessage }));
+      Alert.alert('Erro', errorMessage);
+      throw error;
+    }
+  };
+
+  return (
+    <AuthContext.Provider value={{ auth: authInternal, login, loginWithGoogle, register, logout }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+// Hook para usar o contexto de autenticação
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth deve ser usado dentro de um AuthProvider');
+  }
+  return context;
+};

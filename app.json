@@ -33,13 +33,6 @@
       "@react-native-firebase/auth",
       "@react-native-firebase/crashlytics",
       [
-        "expo-splash-screen",
-        {
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 200,
-          "resizeMode": "contain",
-          "backgroundColor": "#ffffff"
-        },
         "expo-build-properties",
         {
           "ios": {

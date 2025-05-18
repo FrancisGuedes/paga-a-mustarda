@@ -10,8 +10,7 @@
     "newArchEnabled": true,
     "ios": {
       "bundleIdentifier": "com.francisEnterPrises.pagaamustarda",
-      "supportsTablet": true,
-      "googleServicesFile": "./GoogleService-Info.plist"
+      "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {
@@ -19,8 +18,8 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.francisEnterPrises.pagaamustarda",
-      "googleServicesFile": "./google-services.json"
+      "package": "com.francisEnterPrises.pagaamustarda"
+      
     },
     "web": {
       "bundler": "metro",

@@ -71,7 +71,7 @@ if linkage != nil
   use_frameworks! :linkage => linkage.to_sym
 end
 
-target 'PagaAMustarda' do # Certifique-se de que 'PagaAMustarda' é o nome correto do seu target
+target 'pagaamustarda' do # Certifique-se de que 'PagaAMustarda' é o nome correto do seu target
   config = use_native_modules!
 
   use_react_native!(

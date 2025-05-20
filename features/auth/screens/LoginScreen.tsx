@@ -1,22 +1,23 @@
 // src/features/auth/screens/LoginScreen.tsx
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import React, { useState } from 'react';
 import {
-    View,
+    ActivityIndicator,
+    Alert,
+    KeyboardAvoidingView,
+    Platform, // Using Alert for simplicity instead of toast/sonner
+    ScrollView,
+    StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
-    StyleSheet,
-    ActivityIndicator,
-    Alert, // Using Alert for simplicity instead of toast/sonner
-    ScrollView,
-    Platform,
-    KeyboardAvoidingView,
+    View,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 // Assuming your AuthContext is adapted for React Native
-// import { useAuth } from '@/context/AuthContext'; // Adjust path as per your project
-import { Ionicons, AntDesign } from '@expo/vector-icons'; // For icons
+import { useAuth } from '../../../context/AuthContext';
+// TEMP: Mock useAuth for demonstration if AuthContext is missing
+import { AntDesign, Ionicons } from '@expo/vector-icons';
 
 // Define your AuthStackParamList if you haven't already (e.g., in your navigation types file)
 // This is an example, adjust it to your actual navigation setup
@@ -32,49 +33,6 @@ type LoginScreenNavigationProp = NativeStackNavigationProp<
     'Login'
 >;
 
-// Mock useAuth for demonstration if you haven't adapted yours yet
-// In your actual app, you would import and use your real AuthContext
-const useAuth = () => {
-    const [auth, setAuth] = useState({ isLoading: false, error: null, user: null });
-    const navigation = useNavigation<LoginScreenNavigationProp>(); // For navigation example
-
-    const login = async (email: any, password: any) => {
-        console.log('Attempting login with:', email, password);
-        setAuth({ ...auth, isLoading: true, error: null });
-        // Simulate API call
-        return new Promise<void>((resolve, reject) => {
-        setTimeout(() => {
-            if (email === 'test@example.com' && password === 'password') {
-            setAuth({ user: { id: '1', name: 'Test User' } as any, isLoading: false, error: null });
-            Alert.alert('Login Sucesso', 'Bem-vindo!');
-            // navigation.navigate('SomeAppScreen'); // Navigate to main app screen after login
-            resolve();
-            } else {
-            const errorMsg = 'Email ou password inválidos.';
-            setAuth({ ...auth, isLoading: false, error: errorMsg as any });
-            Alert.alert('Erro de Login', errorMsg);
-            reject(new Error(errorMsg));
-            }
-        }, 1000);
-        });
-    };
-
-    const loginWithGoogle = async () => {
-        console.log('Attempting Google login');
-        setAuth({ ...auth, isLoading: true, error: null });
-        return new Promise<void>((resolve) => {
-        setTimeout(() => {
-            setAuth({ user: { id: 'google-1', name: 'Google User' } as any, isLoading: false, error: null });
-            Alert.alert('Login com Google', 'Bem-vindo, utilizador Google!');
-            // navigation.navigate('SomeAppScreen'); // Navigate to main app screen after login
-            resolve();
-        }, 1000);
-        });
-    };
-    return { auth, login, loginWithGoogle };
-};
-// End of mock useAuth
-
 export default function LoginScreen() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -84,16 +42,16 @@ export default function LoginScreen() {
     const handleLogin = async () => {
         // Basic validation
         if (!email.trim() || !password.trim()) {
-        Alert.alert('Campos em Falta', 'Por favor, preencha o email e a password.');
-        return;
+            Alert.alert('Campos em Falta', 'Por favor, preencha o email e a password.');
+            return;
         }
         try {
-        await login(email, password);
-        // Navigation on successful login would typically be handled by a listener
-        // on the auth state in your App.tsx or main navigator.
+            await login(email, password);
+            // Navigation on successful login would typically be handled by a listener
+            // on the auth state in your App.tsx or main navigator.
         } catch (error) {
-        // Error is typically handled within the login function of useAuth
-        console.log('Login failed in component:', error);
+            // Error is typically handled within the login function of useAuth
+            console.log('Login failed in component:', error);
         }
     };
 

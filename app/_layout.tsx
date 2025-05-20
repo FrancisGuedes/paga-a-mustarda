@@ -4,6 +4,7 @@ import { Slot, SplashScreen, useRouter, useSegments } from 'expo-router';
 import { AuthProvider, useAuth } from '../context/AuthContext'; // Ajuste o caminho para o seu AuthContext
 import { ActivityIndicator, View, StyleSheet } from 'react-native';
 import { LogBox } from 'react-native'; // Para ignorar avisos
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 // Ignorar avisos comuns (opcional, mas útil durante o desenvolvimento)
 LogBox.ignoreLogs([
@@ -22,6 +23,7 @@ function RootLayoutNav() {
   const router = useRouter();
 
   useEffect(() => {
+    console.log("Auth state changed: ", auth.user, auth.isLoading);
     if (auth.isLoading) {
       // Ainda a carregar, não fazemos nada, o SplashScreen está visível
       return;
@@ -38,7 +40,8 @@ function RootLayoutNav() {
     } else if (auth.user && inAuthGroup) {
       // Se há utilizador e estamos no fluxo de autenticação (ex: veio do login),
       // redireciona para a página principal da app (ex: o grupo de tabs)
-      router.replace('/(tabs)'); // Ajuste o caminho para o seu ecrã principal após login
+      console.log('[AppLayout] Com utilizador E está no grupo auth. A redirecionar para tabs...');
+      router.replace('/(tabs)');
     }
   }, [auth.isLoading, auth.user, segments, router]);
 
@@ -60,11 +63,12 @@ function RootLayoutNav() {
 }
 
 export default function RootLayout() {
-  // O AuthProvider envolve toda a navegação para que o useAuth() funcione em todo o lado.
   return (
-    <AuthProvider>
-      <RootLayoutNav />
-    </AuthProvider>
+    <SafeAreaProvider> 
+      <AuthProvider>
+        <RootLayoutNav/>
+      </AuthProvider>
+    </SafeAreaProvider>
   );
 }
 

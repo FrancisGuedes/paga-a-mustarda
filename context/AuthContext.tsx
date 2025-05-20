@@ -3,20 +3,16 @@ import React, { createContext, useContext, useEffect, useState, ReactNode } from
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Alert } from 'react-native';
 
-// Definição do tipo para o utilizador mock
-// Pode expandir isto conforme necessário
 export interface User {
   id: string;
   email: string | null;
   displayName?: string | null;
-  // Adicione outros campos mock se precisar
 }
 
-// Definição do tipo para o estado da autenticação
 export interface AuthState {
   user: User | null;
-  isLoading: boolean; // Para o estado inicial de carregamento da sessão e durante operações
-  error: string | null; // Para mensagens de erro
+  isLoading: boolean;
+  error: string | null;
 }
 
 // Definição do tipo para o valor do contexto
@@ -64,7 +60,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return new Promise<void>((resolve, reject) => {
       setTimeout(async () => {
         // Simulação de validação
-        if (email === 'teste@exemplo.com' && password === 'password') {
+        console.log('Tentativa de login com:', { email, password });
+        if (email === 'test@test.com' && password === '1234') {
+          console.log('Validado login com:', { email, password });
           const mockUser: User = {
             id: 'mock-user-123',
             email: email,
@@ -81,6 +79,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             reject(new Error('Erro ao guardar sessão.'));
           }
         } else {
+          console.log('NAO Validado login com:', { email, password });
           const errorMsg = 'Email ou password inválidos (mock).';
           setAuthInternal(prev => ({ ...prev, isLoading: false, error: errorMsg }));
           Alert.alert('Erro de Login Mock', errorMsg);

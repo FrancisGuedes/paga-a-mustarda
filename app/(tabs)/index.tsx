@@ -12,7 +12,8 @@ import {
   Image,
   ActivityIndicator,
   Alert,
-  Button
+  Button,
+  RefreshControl
 } from 'react-native';
 // import { useAuth } from '../../context/AuthContext'; // Descomente se precisar
 import { useRouter, Link, useFocusEffect } from 'expo-router';
@@ -20,6 +21,7 @@ import { useAuth } from '../../context/AuthContext';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../../config/supabase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface Friend {
   id: string;
@@ -30,6 +32,8 @@ interface Friend {
   created_at?: string | null;
   updated_at?: string | null;
 }
+
+const FRIENDS_STORAGE_KEY_PREFIX = 'paga_a_mostarda_friends_cache_';
 
 /**
  * Friends list screen with pending balances.
@@ -43,10 +47,18 @@ interface Friend {
 export default function FriendsScreen() {
   const router = useRouter();
   const { auth } = useAuth();
-  const [loading, setLoading] = useState(false);
+  // `initialLoading` para o primeiro carregamento do ecrã ou quando não há dados em cache.
+  const [initialLoading, setInitialLoading] = useState(true);
+  // `isRefreshing` para atualizações em segundo plano ou pull-to-refresh.
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [friends, setFriends] = useState<Friend[]>([]);
   const insets = useSafeAreaInsets();
+
+  const getFriendsStorageKey = useCallback(() => {
+    if (!auth.user?.id) return null;
+    return `${FRIENDS_STORAGE_KEY_PREFIX}${auth.user.id}`;
+  }, [auth.user?.id]);
 
   /**
    * Function to fetch a user's friends from Supabase.
@@ -80,62 +92,118 @@ export default function FriendsScreen() {
    * 
    * @returns void
    */
-  const loadFriends = useCallback(async () => {
-    console.log("[loadFriends] A iniciar. Auth state:", auth);
+  const loadFriends = useCallback(async (options: { forceNetwork?: boolean; isPullToRefresh?: boolean  } = {}) => {
+    const { forceNetwork = false, isPullToRefresh = false } = options;
+    const storageKey = getFriendsStorageKey();
+    console.log("[loadFriends] storageKey: ", storageKey);
+
     if (!auth.user?.id) {
-      setLoading(false);
+      console.log("[loadFriends] Nenhum utilizador autenticado.");
       setFriends([]);
-      setError(auth.isLoading ? null : "Utilizador não autenticado."); // Mostra erro se não estiver a carregar e não houver utilizador
-      console.log("[loadFriends] Nenhum utilizador autenticado (mock) ou ID em falta, não a buscar amigos.");
+      setInitialLoading(false);
+      setIsRefreshing(false);
       return;
     }
     const currentUserId = auth.user.id;
 
-    setLoading(true);
+    console.log("[loadFriends] A iniciar. Forçar rede:", forceNetwork);    
+    if (isPullToRefresh) {
+      setIsRefreshing(true);
+    } else if (friends.length === 0 || forceNetwork) {
+      // Show main loading only if there are no friends or if forceNetwork is true (not a pull-to-refresh)
+      setInitialLoading(true);
+    }
+    // If we already have friends and it's not a pull-to-refresh, use a more subtle background loading
+    
     setError(null);
 
+    // 1. Try loading from AsyncStorage first, unless forceNetwork is true
+    if (!forceNetwork && !isPullToRefresh && storageKey) {
+      try {
+        const cachedFriendsJson = await AsyncStorage.getItem(storageKey);
+        if (cachedFriendsJson) {
+          const cachedFriends = JSON.parse(cachedFriendsJson) as Friend[];
+          console.log("[loadFriends] Amigos carregados do cache:", cachedFriends.length);
+          setFriends(cachedFriends);
+          setInitialLoading(false);
+        }
+      } catch (e) {
+        console.error("[loadFriends] Erro ao ler amigos do cache:", e);
+      }
+    } else if (forceNetwork && !isPullToRefresh) {
+        // Se forçar a rede, podemos limpar o estado local para mostrar o loading
+        setFriends([]);
+    }
+
+    // 2. Fetch from Supabase to update
     try {
       const data = await fetchFriends(currentUserId);
-      console.log("[loadFriends] Dados dos amigos obtidos:", data);
-      if (data && data.length === 0) {
-        console.log("[loadFriends] Nenhum amigo encontrado para este utilizador no Supabase, mas a query foi bem-sucedida.");
+      console.log("[loadFriends] Dados dos amigos obtidos do Supabase:", data.length);
+      
+      setFriends(data);
+
+      if (storageKey) {
+        try {
+          await AsyncStorage.setItem(storageKey, JSON.stringify(data));
+          console.log("[loadFriends] Amigos guardados no cache.");
+        } catch (e) {
+          console.error("[loadFriends] Erro ao guardar amigos no cache:", e);
+        }
       }
-      setFriends(data as Friend[]);
+      if (data.length === 0) {
+        console.log("[loadFriends] Nenhum amigo encontrado para este utilizador no Supabase.");
+      }
+
     } catch (e: any) {
-      console.error("[loadFriends] Erro final ao carregar amigos:", JSON.stringify(e, null, 2), e); // Log detalhado do erro
-      const errorMessage = e.message || 'Falha ao carregar amigos. Verifique a sua ligação ou tente mais tarde.';
+      console.error("[loadFriends] Erro final ao carregar amigos do Supabase:", JSON.stringify(e, null, 2), e);
+      const errorMessage = e.message || 'Falha ao carregar amigos.';
       setError(errorMessage);
-      Alert.alert("Erro ao Carregar Amigos", errorMessage);
-      setFriends([]);
+      // Se falhar e não tivermos nada do cache, mostramos o erro.
+      // Se já tivermos dados do cache, podemos optar por não mostrar um erro tão proeminente.
+      if (friends.length === 0 || isPullToRefresh) { // Só mostra erro se não tiver dados do cache
+        Alert.alert("Erro ao Carregar Amigos", errorMessage);
+      } else {
+        console.warn("Falha ao atualizar amigos do Supabase, a usar dados do cache:", errorMessage);
+        // Poderia mostrar um toast discreto aqui
+      }
     } finally {
-      setLoading(false);
+      setInitialLoading(false);
+      setIsRefreshing(false);
       console.log("[loadFriends] Finalizado.");
     }
-  }, [auth.user, auth.isLoading]);
+  }, [auth.user, auth.isLoading, getFriendsStorageKey, friends.length]); // Adicionado getFriendsStorageKey
 
+  // Load friends when the screen gains focus or when the user/auth.isLoading changes
   useFocusEffect(
     useCallback(() => {
       if (auth.user && !auth.isLoading) {
         console.log("Ecrã de Amigos focado e utilizador autenticado, a carregar amigos...");
-        loadFriends();
+        // Don’t force a network fetch on focus by default, unless there are no friends in state
+        loadFriends({ forceNetwork: friends.length === 0 });
       } else if (!auth.isLoading && !auth.user) {
         console.log("Ecrã de Amigos focado, mas sem utilizador autenticado.");
-        setFriends([]); // Limpa amigos se não houver utilizador
-        setLoading(false);
+        setFriends([]);
+        const storageKey = getFriendsStorageKey();
+        if (storageKey) AsyncStorage.removeItem(storageKey);
+        setInitialLoading(false);
       }
-    }, [auth.user, auth.isLoading, loadFriends])
+    }, [auth.user, auth.isLoading, loadFriends, getFriendsStorageKey, friends.length])
   );
 
-  const netBalance = !loading && friends.length > 0 ? friends.reduce((acc, friend) => acc + (friend.balance || 0), 0) : 0;
-  const netBalanceText = !loading && friends.length > 0 ?
-                          (netBalance > 0 ? `No total, devem-lhe ${netBalance.toFixed(2)} €` :
-                          netBalance < 0 ? `No total, deve ${Math.abs(netBalance).toFixed(2)} €` :
-                          'No total, as contas estão acertadas.') :
-                          (auth.user && !loading && !error ? 'Sem saldos a apresentar.' : (auth.user && !loading && error ? '' : 'A carregar saldo...'));
+  const onRefresh = useCallback(() => {
+    console.log("Pull to refresh acionado");
+    if (auth.user && !auth.isLoading) {
+      loadFriends({ forceNetwork: true, isPullToRefresh: true });
+    }
+  }, [auth.user, auth.isLoading, loadFriends]);
 
+  const netBalance = friends.reduce((acc, friend) => acc + (friend.balance || 0), 0);
+  const netBalanceText = netBalance > 0 ? `No total, devem-lhe ${netBalance.toFixed(2)} €` :
+                        netBalance < 0 ? `No total, deve ${Math.abs(netBalance).toFixed(2)} €` :
+                        'No total, as contas estão acertadas.';
 
-  const friendsWithPendingBalance = !loading ? friends.filter(f => f.balance !== 0) : [];
-  const settledFriendsCount = !loading ? friends.filter(f => f.balance === 0).length : 0;
+  const friendsWithPendingBalance = friends.filter(f => f.balance !== 0);
+  const settledFriendsCount = friends.filter(f => f.balance === 0).length;
 
   const renderFriendItem = ({ item }: { item: Friend }) => {
     const iOweFriend = item.balance < 0;
@@ -174,8 +242,8 @@ export default function FriendsScreen() {
     );
   };
 
-  // Ecrã de Loading inicial enquanto o AuthContext verifica a sessão
-  if (loading && !auth.user) {
+  // Initial loading screen while AuthContext checks the session
+  if (auth.isLoading) {
     return (
         <View style={[styles.loadingContainer, { paddingTop: insets.top }]}>
             <ActivityIndicator size="large" color="#007AFF" />
@@ -184,7 +252,7 @@ export default function FriendsScreen() {
     );
   }
 
-  // Se não houver utilizador após o carregamento do AuthContext
+  // If there's no user after the AuthContext has finished loading
   if (!auth.user) {
     return (
       <View style={[styles.loadingContainer, { paddingTop: insets.top }]}>
@@ -194,8 +262,8 @@ export default function FriendsScreen() {
     );
   }
 
-  // Se houver utilizador, mas os amigos ainda estão a carregar
-  if (loading) {
+  // If there's a user but friends are still loading
+  if (initialLoading && friends.length === 0) {
     return (
         <View style={[styles.loadingContainer, { paddingTop: insets.top }]}>
             <ActivityIndicator size="large" color="#007AFF" />
@@ -209,6 +277,9 @@ export default function FriendsScreen() {
       <ScrollView
         style={styles.scrollViewStyle}
         contentContainerStyle={styles.scrollContentContainer}
+        refreshControl={
+          <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} colors={["#007AFF"]} tintColor={"#007AFF"}/>
+        }
       >
         <View style={styles.header}>
           <TouchableOpacity style={styles.headerIcon}>
@@ -228,6 +299,14 @@ export default function FriendsScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* Background loading indicator (shown if `isRefreshing` is true but `initialLoading` is false) */}
+        {isRefreshing && !initialLoading && (
+            <View style={styles.backgroundLoadingContainer}>
+                <ActivityIndicator size="small" color="#007AFF" />
+                <Text style={styles.backgroundLoadingText}>A atualizar...</Text>
+            </View>
+        )}
+
         <FlatList
           data={friendsWithPendingBalance}
           renderItem={renderFriendItem}
@@ -237,7 +316,7 @@ export default function FriendsScreen() {
               <Text style={styles.emptyListText}>
                 {error ? `Erro: ${error}` : 'Nenhum amigo com saldo pendente.'}
               </Text>
-              {error && <Button title="Tentar Novamente" onPress={loadFriends} />}
+              {error && <Button title="Tentar Novamente" onPress={() => loadFriends({ forceNetwork: true, isPullToRefresh: true  })} />}
             </View>
           }
           scrollEnabled={false}
@@ -416,5 +495,16 @@ const styles = StyleSheet.create({
     marginTop: 40,
     marginBottom: 20,
     paddingHorizontal: 20,
-  }
+  },
+  backgroundLoadingContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  backgroundLoadingText: {
+    marginLeft: 10,
+    fontSize: 14,
+    color: '#555',
+  },
 });

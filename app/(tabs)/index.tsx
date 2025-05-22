@@ -1,5 +1,7 @@
 // app/(tabs)/index.tsx
-import React, { useState, useEffect } from 'react';
+import 'react-native-url-polyfill/auto';
+//import 'react-native-gesture-handler';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,46 +10,112 @@ import {
   TouchableOpacity,
   ScrollView,
   Image,
-  Platform,
-  Alert
+  ActivityIndicator,
+  Alert,
+  Button
 } from 'react-native';
 // import { useAuth } from '../../context/AuthContext'; // Descomente se precisar
-import { useRouter, Link } from 'expo-router';
+import { useRouter, Link, useFocusEffect } from 'expo-router';
+import { useAuth } from '../../context/AuthContext';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { supabase } from '../../config/supabase';
 
 interface Friend {
   id: string;
+  user_id?: string;
   name: string;
-  avatarUrl?: string;
+  avatarUrl?: string | null;
   balance: number;
+  created_at?: string | null;
+  updated_at?: string | null;
 }
-
-const MOCK_FRIENDS_DATA: Friend[] = [
-  { id: '1', name: 'Rita Martins', balance: 7.25, avatarUrl: '../../assets/images/adaptive-icon.png' },
-  { id: '2', name: 'João Silva', balance: -15.50, avatarUrl: '../../assets/images/adaptive-icon.png' },
-  { id: '3', name: 'Ana Costa', balance: 0, avatarUrl: '../../assets/images/adaptive-icon.png' },
-  { id: '4', name: 'Carlos Dias', balance: 5.00, avatarUrl: '../../assets/images/adaptive-icon.png' },
-];
 
 export default function FriendsScreen() {
   const router = useRouter();
-  const [friends, setFriends] = useState<Friend[]>(MOCK_FRIENDS_DATA);
+  const { auth } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [friends, setFriends] = useState<Friend[]>([]);
   const insets = useSafeAreaInsets();
 
-  const netBalance = friends.reduce((acc, friend) => {
-    if (friend.id === '1' || friend.id === '2' || friend.id === '4') {
-        return acc + friend.balance;
+  const fetchFriends = async (userId: string) => {
+    console.log(`[fetchFriends] A buscar amigos para o user ID: ${userId}`);
+    try {
+      const { data, error: supabaseError, status, statusText } = await supabase
+        .from('friends')
+        .select('*')
+        .eq('user_id', userId);
+
+      console.log(`[fetchFriends] Resposta Supabase - Status: ${status}, StatusText: ${statusText}, Erro:`, supabaseError, "Dados:", data);
+
+      if (supabaseError) {
+        console.error("Erro de Supabase ao buscar amigos (simples):", supabaseError);
+        throw supabaseError; 
+      }
+      return data || []; 
+    } catch (e: any) {
+      console.error("[fetchFriends] Exceção ao buscar amigos:", e);
+      throw e; 
     }
-    return acc;
-  }, 0);
+  };
 
-  const netBalanceText = netBalance > 0 ? `No total, devem-lhe ${netBalance.toFixed(2)} €` :
-                        netBalance < 0 ? `No total, deve ${Math.abs(netBalance).toFixed(2)} €` :
-                        'No total, as contas estão acertadas.';
+  const loadFriends = useCallback(async () => {
+    console.log("[loadFriends] A iniciar. Auth state:", auth);
+    if (!auth.user?.id) {
+      setLoading(false);
+      setFriends([]);
+      setError(auth.isLoading ? null : "Utilizador não autenticado."); // Mostra erro se não estiver a carregar e não houver utilizador
+      console.log("[loadFriends] Nenhum utilizador autenticado (mock) ou ID em falta, não a buscar amigos.");
+      return;
+    }
+    const currentUserId = auth.user.id;
 
-  const friendsWithPendingBalance = friends.filter(f => f.balance !== 0);
-  const settledFriendsCount = friends.filter(f => f.balance === 0).length;
+    setLoading(true);
+    setError(null);
+
+    try {
+      const data = await fetchFriends(currentUserId);
+      console.log("[loadFriends] Dados dos amigos obtidos:", data);
+      if (data && data.length === 0) {
+        console.log("[loadFriends] Nenhum amigo encontrado para este utilizador no Supabase, mas a query foi bem-sucedida.");
+      }
+      setFriends(data as Friend[]);
+    } catch (e: any) {
+      console.error("[loadFriends] Erro final ao carregar amigos:", JSON.stringify(e, null, 2), e); // Log detalhado do erro
+      const errorMessage = e.message || 'Falha ao carregar amigos. Verifique a sua ligação ou tente mais tarde.';
+      setError(errorMessage);
+      Alert.alert("Erro ao Carregar Amigos", errorMessage);
+      setFriends([]);
+    } finally {
+      setLoading(false);
+      console.log("[loadFriends] Finalizado.");
+    }
+  }, [auth.user, auth.isLoading]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (auth.user && !auth.isLoading) {
+        console.log("Ecrã de Amigos focado e utilizador autenticado, a carregar amigos...");
+        loadFriends();
+      } else if (!auth.isLoading && !auth.user) {
+        console.log("Ecrã de Amigos focado, mas sem utilizador autenticado.");
+        setFriends([]); // Limpa amigos se não houver utilizador
+        setLoading(false);
+      }
+    }, [auth.user, auth.isLoading, loadFriends])
+  );
+
+  const netBalance = !loading && friends.length > 0 ? friends.reduce((acc, friend) => acc + (friend.balance || 0), 0) : 0;
+  const netBalanceText = !loading && friends.length > 0 ?
+                          (netBalance > 0 ? `No total, devem-lhe ${netBalance.toFixed(2)} €` :
+                          netBalance < 0 ? `No total, deve ${Math.abs(netBalance).toFixed(2)} €` :
+                          'No total, as contas estão acertadas.') :
+                          (auth.user && !loading && !error ? 'Sem saldos a apresentar.' : (auth.user && !loading && error ? '' : 'A carregar saldo...'));
+
+
+  const friendsWithPendingBalance = !loading ? friends.filter(f => f.balance !== 0) : [];
+  const settledFriendsCount = !loading ? friends.filter(f => f.balance === 0).length : 0;
 
   const renderFriendItem = ({ item }: { item: Friend }) => {
     const iOweFriend = item.balance < 0;
@@ -68,8 +136,9 @@ export default function FriendsScreen() {
     return (
       <TouchableOpacity
         style={styles.friendItemContainer}
-        onPress={() => router.push({ pathname: "/friend/[friendId]", params: { friendId: item.id, name: item.name } })}
+        onPress={() => router.push({ pathname: `/friend/[friendId]`, params: { friendId: item.id, name: item.name } })}
       >
+        {/* TODO: o pathname para o amigo tem de ser mudado para pathname: `/friend/${item.id}` */}
         {item.avatarUrl && item.avatarUrl !== 'placeholder' ? (
           <Image source={{ uri: item.avatarUrl }} style={styles.avatar} />
         ) : (
@@ -85,12 +154,41 @@ export default function FriendsScreen() {
     );
   };
 
+  // Ecrã de Loading inicial enquanto o AuthContext verifica a sessão
+  if (loading && !auth.user) {
+    return (
+        <View style={[styles.loadingContainer, { paddingTop: insets.top }]}>
+            <ActivityIndicator size="large" color="#007AFF" />
+            <Text>Aguardando autenticação...</Text>
+        </View>
+    );
+  }
+
+  // Se não houver utilizador após o carregamento do AuthContext
+  if (!auth.user) {
+    return (
+      <View style={[styles.loadingContainer, { paddingTop: insets.top }]}>
+        <Text style={styles.errorText}>Precisa de estar logado para ver os amigos.</Text>
+        {/* O redirecionamento para login deve ser tratado pelo app/_layout.tsx */}
+      </View>
+    );
+  }
+
+  // Se houver utilizador, mas os amigos ainda estão a carregar
+  if (loading) {
+    return (
+        <View style={[styles.loadingContainer, { paddingTop: insets.top }]}>
+            <ActivityIndicator size="large" color="#007AFF" />
+            <Text>A carregar amigos...</Text>
+        </View>
+    );
+  }
+
   return (
     <View style={{ flex: 1, paddingTop: insets.top, backgroundColor: styles.screenContainer.backgroundColor }}>
       <ScrollView
         style={styles.scrollViewStyle}
         contentContainerStyle={styles.scrollContentContainer}
-        // stickyHeaderIndices={[1]} // Descomente se quiser o sumário fixo
       >
         <View style={styles.header}>
           <TouchableOpacity style={styles.headerIcon}>
@@ -113,8 +211,15 @@ export default function FriendsScreen() {
         <FlatList
           data={friendsWithPendingBalance}
           renderItem={renderFriendItem}
-          keyExtractor={item => item.id}
-          ListEmptyComponent={<Text style={styles.emptyListText}>Nenhum amigo com saldo pendente.</Text>}
+          keyExtractor={item => item.id.toString()}
+          ListEmptyComponent={
+            <View style={styles.emptyListContainer}>
+              <Text style={styles.emptyListText}>
+                {error ? `Erro: ${error}` : 'Nenhum amigo com saldo pendente.'}
+              </Text>
+              {error && <Button title="Tentar Novamente" onPress={loadFriends} />}
+            </View>
+          }
           scrollEnabled={false}
         />
 
@@ -266,4 +371,31 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F7F7F7',
+  },
+  listLoadingContainer: {
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
+  listLoadingText: {
+    marginTop: 10,
+    fontSize: 14,
+    color: '#555',
+  },
+  errorText: {
+    color: 'red',
+    fontSize: 16,
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  emptyListContainer: {
+    alignItems: 'center',
+    marginTop: 40,
+    marginBottom: 20,
+    paddingHorizontal: 20,
+  }
 });

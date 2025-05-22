@@ -64,7 +64,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (email === 'test@test.com' && password === '1234') {
           console.log('Validado login com:', { email, password });
           const mockUser: User = {
-            id: 'mock-user-123',
+            id: '04b170f9-794c-4f64-8d46-c9fa3c31a382',
             email: email,
             displayName: email.split('@')[0] || 'Utilizador Teste',
           };

@@ -31,6 +31,15 @@ interface Friend {
   updated_at?: string | null;
 }
 
+/**
+ * Friends list screen with pending balances.
+ * Displays a summary at the top with the total balance and allows adding new friends.
+ * The friends list is rendered using a FlatList, with a button for each item.
+ * Each button navigates to the friend's detail screen.
+ * The screen also includes options to filter the friends.
+ * 
+ * @returns JSX.Element
+ */
 export default function FriendsScreen() {
   const router = useRouter();
   const { auth } = useAuth();
@@ -39,6 +48,12 @@ export default function FriendsScreen() {
   const [friends, setFriends] = useState<Friend[]>([]);
   const insets = useSafeAreaInsets();
 
+  /**
+   * Function to fetch a user's friends from Supabase.
+   * 
+   * @param userId The ID of the user whose friends should be retrieved.
+   * @returns An array of objects containing the friends' information.
+   */
   const fetchFriends = async (userId: string) => {
     console.log(`[fetchFriends] A buscar amigos para o user ID: ${userId}`);
     try {
@@ -60,6 +75,11 @@ export default function FriendsScreen() {
     }
   };
 
+  /**
+   * Function to load user's friends.
+   * 
+   * @returns void
+   */
   const loadFriends = useCallback(async () => {
     console.log("[loadFriends] A iniciar. Auth state:", auth);
     if (!auth.user?.id) {
@@ -257,23 +277,23 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingBottom: 10, // Ajustado o padding do header
+    paddingBottom: 10,
     backgroundColor: '#FFFFFF',
   },
   headerIcon: {
     padding: 8,
   },
-  addFriendsLinkStyle: { // Estilo para o próprio Link se necessário (ex: para padding)
+  addFriendsLinkStyle: {
     padding: 8,
   },
   addFriendsButtonText: {
-    fontSize: 17, // Ajustado para corresponder à imagem
+    fontSize: 17, 
     color: '#007AFF',
     fontWeight: '500',
   },
   summaryContainer: {
     paddingHorizontal: 16,
-    paddingVertical: 20, // Ajustado para corresponder à imagem
+    paddingVertical: 20, 
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderTopWidth: 1,
@@ -301,26 +321,25 @@ const styles = StyleSheet.create({
     borderBottomColor: '#F0F0F0',
   },
   avatar: {
-    width: 48, // Ajustado para corresponder à imagem
-    height: 48, // Ajustado para corresponder à imagem
-    borderRadius: 24, // Ajustado para corresponder à imagem
-    marginRight: 16, // Ajustado para corresponder à imagem
+    width: 48, 
+    height: 48, 
+    borderRadius: 24, 
+    marginRight: 16, 
     backgroundColor: '#E9E9EF',
   },
   friendInfo: {
     flex: 1,
   },
   friendName: {
-    fontSize: 17, // Ajustado para corresponder à imagem
+    fontSize: 17, 
     fontWeight: "500",
     color: '#1C1C1E',
   },
   friendBalance: {
     alignItems: 'flex-end',
-    //marginLeft: 8,
   },
   balanceText: {
-    fontSize: 16, // Ajustado para corresponder à imagem
+    fontSize: 16, 
     fontWeight: '400',
   },
   friendOwesMeColor: {

@@ -224,7 +224,9 @@ export default function FriendsScreen() {
     return (
       <TouchableOpacity
         style={styles.friendItemContainer}
-        onPress={() => router.push({ pathname: `/friend/[friendId]`, params: { friendId: item.id, name: item.name } })}
+        onPress={() => router.push({ pathname: `/friend/[friendId]`, 
+          params: { friendId: item.id, name: item.name } 
+        })}
       >
         {/* TODO: o pathname para o amigo tem de ser mudado para pathname: `/friend/${item.id}` */}
         {item.avatarUrl && item.avatarUrl !== 'placeholder' ? (

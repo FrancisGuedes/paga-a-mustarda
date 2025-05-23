@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../../../config/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../../../context/AuthContext';
+import { useCurrentFriend } from '../../../context/FriendContext'; 
 
 // Interface para Despesa
 export interface Expense {
@@ -33,14 +34,16 @@ const EXPENSES_STORAGE_KEY_PREFIX = 'paga_a_mostarda_expenses_cache_v3_';
 
 
 export default function FriendExpensesScreen() {
-    const { friendId: routeFriendId, name } = useLocalSearchParams<{ friendId: string; name?: string }>();
+    const { friendId: routeFriendId, name, avatarUrl: routeFriendAvatarUrl } = useLocalSearchParams<{ friendId: string; name?: string; avatarUrl?: string }>();
     const { auth } = useAuth();
+    const { setCurrentFriend } = useCurrentFriend();
     const [expenses, setExpenses] = useState<Expense[]>([]);
     const [loading, setLoading] = useState(true);
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const insets = useSafeAreaInsets();
     const router = useRouter();
+    
 
     // O nome do amigo é passado como parâmetro de query na navegação
     const friendName = name ? decodeURIComponent(name) : `Amigo ${routeFriendId}`;
@@ -54,7 +57,7 @@ export default function FriendExpensesScreen() {
     }, [auth.user?.id, routeFriendId]);
 
 
-const fetchExpensesFromSupabase = async (userId: string, friendIdParam: string) => {
+    const fetchExpensesFromSupabase = async (userId: string, friendIdParam: string) => {
     console.log(`[SupabaseFetch] A buscar despesas para user ID: ${userId} e friend ID: ${friendIdParam}`);
     try {
       // A query precisa buscar despesas onde o utilizador logado e o amigo estão envolvidos.
@@ -82,66 +85,90 @@ const fetchExpensesFromSupabase = async (userId: string, friendIdParam: string) 
     };
 
     const loadExpenses = useCallback(async (options: { forceNetwork?: boolean; isPullToRefresh?: boolean } = {}) => {
-    const { forceNetwork = false, isPullToRefresh = false } = options;
-    const storageKey = getExpensesStorageKey();
+        const { forceNetwork = false, isPullToRefresh = false } = options;
+        const storageKey = getExpensesStorageKey();
 
-    if (!auth.user?.id || !routeFriendId) {
-        setExpenses([]); setLoading(false); setIsRefreshing(false); return;
-    }
-    const currentUserId = auth.user.id;
-    
-    if (isPullToRefresh) setIsRefreshing(true);
-    else if (expenses.length === 0 || forceNetwork) setLoading(true);
-    setError(null);
-
-    if (!forceNetwork && !isPullToRefresh && storageKey) {
-        try {
-            const cachedExpensesJson = await AsyncStorage.getItem(storageKey);
-            if (cachedExpensesJson) {
-                const cachedExpenses = JSON.parse(cachedExpensesJson) as Expense[];
-                if (cachedExpenses.length > 0) {
-                    setExpenses(cachedExpenses);
-                    if(!isPullToRefresh) setLoading(false);
-                }
-            }
-        } catch (e) { 
-            console.error("[loadExpenses] Erro ao ler cache:", e); 
+        if (!auth.user?.id || !routeFriendId) {
+            setExpenses([]); setLoading(false); setIsRefreshing(false); return;
         }
-    } else if (forceNetwork && !isPullToRefresh) {
-        setExpenses([]);
-    }
+        const currentUserId = auth.user.id;
+        
+        if (isPullToRefresh) setIsRefreshing(true);
+        else if (expenses.length === 0 || forceNetwork) setLoading(true);
+        setError(null);
 
-    try {
-        const dataFromSupabase = await fetchExpensesFromSupabase(currentUserId, routeFriendId);
-        setExpenses(dataFromSupabase);
-        if (storageKey) {
+        if (!forceNetwork && !isPullToRefresh && storageKey) {
             try {
-                await AsyncStorage.setItem(storageKey, JSON.stringify(dataFromSupabase));
+                const cachedExpensesJson = await AsyncStorage.getItem(storageKey);
+                if (cachedExpensesJson) {
+                    const cachedExpenses = JSON.parse(cachedExpensesJson) as Expense[];
+                    if (cachedExpenses.length > 0) {
+                        setExpenses(cachedExpenses);
+                        if(!isPullToRefresh) setLoading(false);
+                    }
+                }
             } catch (e) { 
-                console.error("[loadExpenses] Erro ao guardar no cache:", e); 
+                console.error("[loadExpenses] Erro ao ler cache:", e); 
             }
+        } else if (forceNetwork && !isPullToRefresh) {
+            setExpenses([]);
         }
-        } catch (e: any) {
-            const errorMessage = e.message || 'Falha ao carregar despesas.';
-            setError(errorMessage);
-            if (expenses.length === 0 || isPullToRefresh) Alert.alert("Erro", errorMessage);
-            else console.warn("Falha ao atualizar, a usar cache:", errorMessage);
-        } finally {
-            setLoading(false); setIsRefreshing(false);
-        }
+
+        try {
+            const dataFromSupabase = await fetchExpensesFromSupabase(currentUserId, routeFriendId);
+            setExpenses(dataFromSupabase);
+            if (storageKey) {
+                try {
+                    await AsyncStorage.setItem(storageKey, JSON.stringify(dataFromSupabase));
+                } catch (e) { 
+                    console.error("[loadExpenses] Erro ao guardar no cache:", e); 
+                }
+                }
+            } catch (e: any) {
+                const errorMessage = e.message || 'Falha ao carregar despesas.';
+                setError(errorMessage);
+                if (expenses.length === 0 || isPullToRefresh) Alert.alert("Erro", errorMessage);
+                else console.warn("Falha ao atualizar, a usar cache:", errorMessage);
+            } finally {
+                setLoading(false); setIsRefreshing(false);
+            }
     }, [auth.user, routeFriendId, getExpensesStorageKey, expenses.length]);
 
     useFocusEffect(
         useCallback(() => {
-            if (auth.user && !auth.isLoading && routeFriendId) {
+            let isActive = true;
+
+            if (routeFriendId && friendName) {
+                console.log(`[FriendExpensesScreen] Focado. Definindo amigo atual: ID=${routeFriendId}, Nome=${friendName}`);
+                setCurrentFriend({ id: routeFriendId, name: friendName, avatarUrl: routeFriendAvatarUrl });
+            }
+
+            /* if (auth.user && !auth.isLoading && routeFriendId) {
                 loadExpenses({ forceNetwork: expenses.length === 0 });
             } else if (!auth.isLoading && !auth.user) {
                 setExpenses([]);
                 const storageKey = getExpensesStorageKey();
                 if(storageKey) AsyncStorage.removeItem(storageKey);
                 setLoading(false);
+            } */
+
+            if (auth.user && !auth.isLoading && routeFriendId && isActive) {
+                loadExpenses({ forceNetwork: expenses.length === 0 });
+            } else if (!auth.isLoading && !auth.user && isActive) {
+                setExpenses([]);
+                const storageKey = getExpensesStorageKey();
+                if(storageKey) AsyncStorage.removeItem(storageKey);
+                setLoading(false);
             }
-        }, [auth.user, auth.isLoading, routeFriendId, loadExpenses, getExpensesStorageKey, expenses.length])
+
+            return () => {
+                isActive = false;
+                console.log("[FriendExpensesScreen] Desfocado/Desmontado. Limpando amigo atual do contexto.");
+                setCurrentFriend(null); // Limpa o amigo atual ao sair do ecrã
+            };
+            
+        }, [auth.user, auth.isLoading, routeFriendId, friendName, routeFriendAvatarUrl, setCurrentFriend, loadExpenses, expenses.length, getExpensesStorageKey])
+        //}, [auth.user, auth.isLoading, routeFriendId, loadExpenses, getExpensesStorageKey, expenses.length])
     );
 
     const onRefresh = useCallback(() => {
@@ -164,7 +191,6 @@ const fetchExpensesFromSupabase = async (userId: string, friendIdParam: string) 
     }
 
     // Agrupar despesas por mês/ano
-    console.log(`[groupedExpenses] Agrupando despesas por mês/ano:`, expenses);
     const groupedExpenses = expenses.reduce((acc, expense) => {
         const date = new Date(expense.date);
         const monthYear = `${date.toLocaleString('pt-PT', { month: 'long' })} ${date.getFullYear()}`;
@@ -255,10 +281,6 @@ const fetchExpensesFromSupabase = async (userId: string, friendIdParam: string) 
                     const shareColor = expense.user_share > 0 ? styles.positiveAmountColor : styles.negativeAmountColor;
                     const shareText = expense.user_share > 0 ? 'emprestou' : 'emprestaram-lhe';
                     
-                    console.log(`[groupedExpenses] Despesa ${expense.id}: ${expense.description} - ${userShareAbs} € (${shareText})`);
-                    console.log(`[groupedExpenses] Despesa user_share ${expense.user_share}`);
-
-
                     return (
                         <View key={expense.id} style={styles.expenseItem}>
                         <View style={styles.expenseDateContainer}>
@@ -284,10 +306,7 @@ const fetchExpensesFromSupabase = async (userId: string, friendIdParam: string) 
             </View>
             ))}
         </ScrollView>
-        <TouchableOpacity style={styles.fab} onPress={() => Alert.alert("Nova Despesa", `Adicionar despesa com ${friendName}`)}>
-            <Ionicons name="add" size={30} color="#fff" />
-        </TouchableOpacity>
-        </View>
+    </View>
     );
 }
 

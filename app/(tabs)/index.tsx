@@ -74,7 +74,7 @@ export default function FriendsScreen() {
         .select('*')
         .eq('user_id', userId);
 
-      console.log(`[fetchFriends] Resposta Supabase - Status: ${status}, StatusText: ${statusText}, Erro:`, supabaseError, "Dados:", data);
+      //console.log(`[fetchFriends] Resposta Supabase - Status: ${status}, StatusText: ${statusText}, Erro:`, supabaseError, "Dados:", data);
 
       if (supabaseError) {
         console.error("Erro de Supabase ao buscar amigos (simples):", supabaseError);
@@ -95,10 +95,10 @@ export default function FriendsScreen() {
   const loadFriends = useCallback(async (options: { forceNetwork?: boolean; isPullToRefresh?: boolean  } = {}) => {
     const { forceNetwork = false, isPullToRefresh = false } = options;
     const storageKey = getFriendsStorageKey();
-    console.log("[loadFriends] storageKey: ", storageKey);
+    //console.log("[loadFriends] storageKey: ", storageKey);
 
     if (!auth.user?.id) {
-      console.log("[loadFriends] Nenhum utilizador autenticado.");
+      //console.log("[loadFriends] Nenhum utilizador autenticado.");
       setFriends([]);
       setInitialLoading(false);
       setIsRefreshing(false);
@@ -106,7 +106,7 @@ export default function FriendsScreen() {
     }
     const currentUserId = auth.user.id;
 
-    console.log("[loadFriends] A iniciar. Forçar rede:", forceNetwork);    
+    //console.log("[loadFriends] A iniciar. Forçar rede:", forceNetwork);    
     if (isPullToRefresh) {
       setIsRefreshing(true);
     } else if (friends.length === 0 || forceNetwork) {
@@ -123,7 +123,7 @@ export default function FriendsScreen() {
         const cachedFriendsJson = await AsyncStorage.getItem(storageKey);
         if (cachedFriendsJson) {
           const cachedFriends = JSON.parse(cachedFriendsJson) as Friend[];
-          console.log("[loadFriends] Amigos carregados do cache:", cachedFriends.length);
+          //console.log("[loadFriends] Amigos carregados do cache:", cachedFriends.length);
           setFriends(cachedFriends);
           setInitialLoading(false);
         }
@@ -138,20 +138,20 @@ export default function FriendsScreen() {
     // 2. Fetch from Supabase to update
     try {
       const data = await fetchFriends(currentUserId);
-      console.log("[loadFriends] Dados dos amigos obtidos do Supabase:", data.length);
+      //console.log("[loadFriends] Dados dos amigos obtidos do Supabase:", data.length);
       
       setFriends(data);
 
       if (storageKey) {
         try {
           await AsyncStorage.setItem(storageKey, JSON.stringify(data));
-          console.log("[loadFriends] Amigos guardados no cache.");
+          //console.log("[loadFriends] Amigos guardados no cache.");
         } catch (e) {
           console.error("[loadFriends] Erro ao guardar amigos no cache:", e);
         }
       }
       if (data.length === 0) {
-        console.log("[loadFriends] Nenhum amigo encontrado para este utilizador no Supabase.");
+        //console.log("[loadFriends] Nenhum amigo encontrado para este utilizador no Supabase.");
       }
 
     } catch (e: any) {
@@ -169,7 +169,7 @@ export default function FriendsScreen() {
     } finally {
       setInitialLoading(false);
       setIsRefreshing(false);
-      console.log("[loadFriends] Finalizado.");
+      //console.log("[loadFriends] Finalizado.");
     }
   }, [auth.user, auth.isLoading, getFriendsStorageKey, friends.length]); // Adicionado getFriendsStorageKey
 

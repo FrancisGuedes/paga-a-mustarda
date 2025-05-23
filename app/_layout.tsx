@@ -1,9 +1,9 @@
 // app/_layout.tsx
 import React, { useEffect } from 'react';
 import { Slot, SplashScreen, useRouter, useSegments } from 'expo-router';
-import { AuthProvider, useAuth } from '../context/AuthContext'; // Ajuste o caminho para o seu AuthContext
-import { ActivityIndicator, View, StyleSheet } from 'react-native';
-import { LogBox } from 'react-native'; // Para ignorar avisos
+import { AuthProvider, useAuth } from '../context/AuthContext';
+import { FriendProvider } from '../context/FriendContext';
+import { ActivityIndicator, View, StyleSheet, LogBox } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 // Ignorar avisos comuns (opcional, mas útil durante o desenvolvimento)
@@ -19,7 +19,7 @@ SplashScreen.preventAutoHideAsync();
 
 function RootLayoutNav() {
   const { auth } = useAuth();
-  const segments = useSegments(); // Obtém os segmentos da rota atual
+  const segments = useSegments();
   const router = useRouter();
 
   useEffect(() => {
@@ -66,7 +66,9 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider> 
       <AuthProvider>
-        <RootLayoutNav/>
+        <FriendProvider>
+          <RootLayoutNav />
+        </FriendProvider>
       </AuthProvider>
     </SafeAreaProvider>
   );

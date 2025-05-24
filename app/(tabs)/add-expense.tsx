@@ -3,6 +3,7 @@ import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
     Stack,
+    useFocusEffect,
     useLocalSearchParams,
     useNavigation,
     useRouter,
@@ -24,9 +25,18 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../config/supabase";
+
 import type { SplitTypeOption } from "../select-split-type";
+import { SELECTED_EXPENSE_DATE_KEY } from '../select-date';
 
 const ASYNC_STORAGE_SELECTED_SPLIT_OPTION_KEY = "selected_split_option";
+
+const formatDateForDisplay = (dateString: string): string => {
+  const date = new Date(dateString);
+  // Adiciona um dia para corrigir potenciais problemas de fuso horário que fazem a data parecer um dia antes
+  const adjustedDate = new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+  return `${adjustedDate.toLocaleDateString('pt-PT', { day: 'numeric' })} de ${adjustedDate.toLocaleDateString('pt-PT', { month: 'short' }).replace('.','')}`;
+};
 
 export default function AddExpenseScreen() {
     const router = useRouter();
@@ -53,6 +63,8 @@ export default function AddExpenseScreen() {
         "Selecione como foi pago"
     ); // Default inicial
     const [isSaving, setIsSaving] = useState(false);
+    // Novo estado para a data da despesa, inicializado com a data atual no formato YYYY-MM-DD
+    const [expenseDate, setExpenseDate] = useState<string>(new Date().toISOString().split('T')[0]);
 
     // Efeito para definir o amigo selecionado APENAS quando os PARÂMETROS DA ROTA mudam
     useEffect(() => {
@@ -152,6 +164,30 @@ export default function AddExpenseScreen() {
             setIsLoadingSplitOption(false);
         }
     }, []); // useCallback com array de dependências vazio torna esta função estável
+
+    // useFocusEffect para ler a data selecionada do AsyncStorage
+    useFocusEffect(
+        useCallback(() => {
+        const loadSelectedDate = async () => {
+            try {
+                const storedDate = await AsyncStorage.getItem(SELECTED_EXPENSE_DATE_KEY);
+                if (storedDate) {
+                    console.log("[AddExpenseScreen] Data carregada do AsyncStorage:", storedDate);
+                    setExpenseDate(storedDate);
+                    // Opcional: Limpar após ler para que não afete a próxima vez que o ecrã for aberto,
+                    // a menos que o utilizador selecione novamente.
+                    // await AsyncStorage.removeItem(SELECTED_EXPENSE_DATE_KEY);
+                } else {
+                    console.log("[AddExpenseScreen] Nenhuma data selecionada no AsyncStorage.");
+                    // Mantém a data atual se nada for encontrado (já definido no useState inicial)
+                }
+            } catch (e) {
+                console.error("Erro ao ler data selecionada do AsyncStorage:", e);
+            }
+        };
+        loadSelectedDate();
+        }, []) // Executa apenas quando o ecrã ganha foco
+    );
 
     // Efeito para carregar a opção de divisão quando o amigo selecionado muda
     // ou quando o ecrã foca e ainda não temos uma opção selecionada.
@@ -269,7 +305,7 @@ export default function AddExpenseScreen() {
                 description: description.trim(),
                 total_amount: numericAmount,
                 user_share: userShare,
-                date: new Date().toISOString(),
+                date: expenseDate,
                 paid_by_user: selectedSplitOption.user_pays_total,
             };
             await supabase
@@ -300,9 +336,12 @@ export default function AddExpenseScreen() {
             }
             Alert.alert("Sucesso", "Despesa adicionada!");
             await AsyncStorage.removeItem(ASYNC_STORAGE_SELECTED_SPLIT_OPTION_KEY);
+            await AsyncStorage.removeItem(SELECTED_EXPENSE_DATE_KEY);
             setSelectedSplitOption(null);
             setDescription("");
             setAmount("");
+            setExpenseDate(new Date().toISOString().split('T')[0]); // Reset date
+
             if (router.canGoBack()) router.back();
             else router.replace("/(tabs)");
         } catch (error: any) {
@@ -319,6 +358,7 @@ export default function AddExpenseScreen() {
         selectedSplitOption,
         router,
         params.friendId,
+        expenseDate,
     ]);
 
     const canSaveChanges =
@@ -486,10 +526,25 @@ export default function AddExpenseScreen() {
                         />
                     </TouchableOpacity>
                     <View style={styles.bottomControls}>
-                        <TouchableOpacity style={styles.controlButton}>
-                            <Ionicons name="calendar-outline" size={20} color="#555" style={styles.controlIcon} />
-                            <Text>Hoje</Text>
-                        </TouchableOpacity>
+                        <View style={styles.leftControls}>
+                            <TouchableOpacity 
+                                    style={styles.controlButton}
+                                    onPress={() => router.push({ 
+                                    pathname: '/select-date', 
+                                    params: { currentDate: expenseDate } // Passa a data atual para o modal
+                                })}
+                            >
+                                <Ionicons name="calendar-outline" size={24} color="#555" style={styles.controlIcon} />
+                                {/* Mostra a data selecionada ou "Hoje" */}
+                                <Text style={styles.controlButtonText}>
+                                    {expenseDate === new Date().toISOString().split('T')[0] ? 'Hoje' : formatDateForDisplay(expenseDate)}
+                                </Text>
+                            </TouchableOpacity>
+                            {/* <TouchableOpacity style={styles.controlButton}>
+                                <MaterialCommunityIcons name="account-group-outline" size={24} color="#555" style={styles.controlIcon} />
+                                <Text style={styles.controlButtonText}>Sem grupo</Text>
+                            </TouchableOpacity> */}
+                        </View>
                         <TouchableOpacity style={styles.controlButton}>
                             <Ionicons name="people-outline" size={20} color="#555" style={styles.controlIcon} />
                             <Text>Sem grupo</Text>

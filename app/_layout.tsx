@@ -63,19 +63,15 @@ function ProtectedNavigation() {
   return (
     <Stack screenOptions={{ headerShown: false /* Oculta headers por defeito para a Stack raiz */ }}>
       <Stack.Screen name="(tabs)" /> {/* O (tabs) tem o seu próprio _layout.tsx para definir as Tabs */}
-      <Stack.Screen name="(auth)" /> {/* O (auth) tem o seu próprio _layout.tsx para a stack de auth */}
+      <Stack.Screen name="(auth)/login" /> {/* O (auth) tem o seu próprio _layout.tsx para a stack de auth */}
       
       {/* Ecrãs Modais definidos na raiz de app/ */}
-      <Stack.Screen 
+      {/* <Stack.Screen 
         name="add-expense" // app/add-expense.tsx
         options={{ 
           presentation: 'modal',
-          // O título e os botões de header são definidos DENTRO de add-expense.tsx
-          // usando navigation.setOptions ou <Stack.Screen options={...} /> lá.
-          // Se quiser um título default aqui: title: 'Adicionar Despesa'
-          // headerShown: true, // Para garantir que o modal tem header
         }} 
-      />
+      /> */}
       <Stack.Screen 
         name="select-split-type" // app/select-split-type.tsx
         options={{ 
@@ -84,6 +80,11 @@ function ProtectedNavigation() {
           // headerShown: true,
         }} 
       />
+      <Stack.Screen 
+        name="select-date" 
+        options={{ 
+          presentation: 'modal' 
+        }} />
       <Stack.Screen name="+not-found" />
     </Stack>
   );

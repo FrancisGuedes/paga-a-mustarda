@@ -138,6 +138,11 @@ export default function TabLayout() {
           href: null 
         }} 
       />
+      <Tabs.Screen name="select-date" 
+        options={{ 
+          href: null 
+        }} 
+      />
     </Tabs>
   );
 }

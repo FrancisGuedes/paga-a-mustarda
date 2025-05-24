@@ -14,12 +14,12 @@ import {
   Button,
 } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { supabase } from '../../config/supabase';
-import { useAuth } from '../../context/AuthContext';
+import { supabase } from '../config/supabase';
+import { useAuth } from '../context/AuthContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { SplitTypeOption } from '../select-split-type'; // Assume que este tipo está definido em app/select-split-type.tsx
+import type { SplitTypeOption } from './select-split-type'; // Assume que este tipo está definido em app/select-split-type.tsx
 
 export default function AddExpenseScreen() {
   const router = useRouter();
@@ -213,7 +213,10 @@ export default function AddExpenseScreen() {
     // Por agora, mostra uma mensagem e um botão para voltar.
     return (
         <View style={[styles.container, {paddingTop: insets.top}]}>
-            <Stack.Screen options={{ title: 'Adicionar Despesa' }} />
+            <Stack.Screen options={{ 
+              presentation: 'modal',
+              title: 'Adicionar Despesa' 
+              }} />
             <Text style={styles.infoText}>Primeiro, precisa de selecionar um amigo.</Text>
             <Text style={styles.infoSubText}>(UI de seleção de amigo a ser implementada)</Text>
             <View style={{marginTop: 20}}>
@@ -227,6 +230,7 @@ export default function AddExpenseScreen() {
     <View style={[styles.screenContainer, { paddingTop: insets.top }]}>
       <Stack.Screen
         options={{
+          presentation: 'modal',
           title: 'Adicionar uma despesa',
           headerRight: () => (
             <TouchableOpacity onPress={handleSaveExpense} disabled={!canSaveChanges || isSaving}>

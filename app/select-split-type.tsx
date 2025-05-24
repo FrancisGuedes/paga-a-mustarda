@@ -50,41 +50,6 @@ export default function SelectSplitTypeScreen() {
         fetchSplitOptions();
     }, [fetchSplitOptions]);
 
-    /* const handleSelectOption = (option: SplitTypeOption) => {
-        setSelectedOptionId(option.id);
-        // Em vez de navegar de volta, usamos o router para passar os dados para a rota anterior
-        // O Expo Router não tem um sistema de "retorno com resultado" tão direto como o React Navigation clássico.
-        // Uma abordagem é usar um estado global (Zustand, Context) ou passar parâmetros de volta
-        // ao navegar para trás, mas o mais simples para Expo Router é usar router.back()
-        // e o ecrã anterior (AddExpenseScreen) pode usar useFocusEffect para verificar se algo mudou
-        // ou, melhor ainda, usar um state manager.
-        // Por agora, vamos assumir que o AddExpenseScreen vai buscar esta seleção
-        // de alguma forma (ex: através de um state manager ou esperando um parâmetro ao voltar).
-        // Para este exemplo, vamos apenas navegar de volta. O AddExpenseScreen precisará de uma forma de
-        // saber qual opção foi selecionada (ex: guardando no AsyncStorage ou num state manager).
-
-        // Para simplificar, vamos assumir que o router pode passar parâmetros ao voltar,
-        // ou que um state manager é usado. Para este exemplo, vamos apenas voltar.
-        // Idealmente, o AddExpenseScreen usaria um listener ou um state manager.
-        if (router.canGoBack()) {
-            // Para passar o resultado de volta, o ideal seria um state manager (Zustand, Redux, Context API)
-            // ou usar AsyncStorage e o ecrã anterior ler de lá no useFocusEffect.
-            // Por agora, vamos apenas simular que o ecrã anterior saberá.
-            // Para um exemplo mais concreto, poderíamos usar router.setParams na rota anterior,
-            // mas isso é mais complexo com modais.
-            // A forma mais simples é o ecrã anterior (AddExpenseScreen) ter um estado
-            // que é atualizado por este ecrã através de um callback passado como parâmetro,
-            // ou usando um state manager.
-
-            // Para este exemplo, vamos assumir que o AddExpenseScreen vai buscar o resultado
-            // de um state manager ou AsyncStorage após o router.back().
-            // Exemplo com AsyncStorage (o AddExpenseScreen leria isto no useFocusEffect):
-            AsyncStorage.setItem('selected_split_option', JSON.stringify(option)).then(() => {
-                router.back();
-            });
-        }
-    }; */
-
     const handleSelectOption = async (option: SplitTypeOption) => {
         setSelectedOptionId(option.id);
         console.log("[SelectSplitTypeScreen] Opção selecionada:", option);
@@ -125,9 +90,7 @@ export default function SelectSplitTypeScreen() {
     };
 
     return (
-        <View style={[styles.screenContainer, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-{/*             <Stack.Screen options={{ title: 'Como foi pago?', presentation: 'modal' }} />
- */}            
+        <View style={[styles.screenContainer, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>          
             <Stack.Screen
                 options={{
                 title: 'Como foi pago?',

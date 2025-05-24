@@ -1,7 +1,7 @@
 // app/select-split-type.tsx
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { Stack, useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -28,6 +28,7 @@ const areOptionsArraysEqual = (arr1: SplitTypeOption[], arr2: SplitTypeOption[])
 
 export default function SelectSplitTypeScreen() {
     const router = useRouter();
+    const navigation = useNavigation();
     const params = useLocalSearchParams<{ friendName?: string; currentOptionId?: string }>();
     const friendName = params.friendName || 'o amigo';
     const currentOptionId = params.currentOptionId;
@@ -37,28 +38,8 @@ export default function SelectSplitTypeScreen() {
     const [pageLoading, setPageLoading] = useState(false);
     // `isRefreshing` para indicar uma atualização em segundo plano
     const [isRefreshing, setIsRefreshing] = useState(false);
-
     const [selectedOptionId, setSelectedOptionId] = useState<string | undefined>(currentOptionId);
     const insets = useSafeAreaInsets();
-
-    /* const fetchSplitOptions = useCallback(async () => {
-        setLoading(true);
-        try {
-            const { data, error } = await supabase
-                .from('expense_split_options')
-                .select('*')
-                .order('sort_order', { ascending: true });
-
-            if (error) throw error;
-            setOptions(data || []);
-        } catch (error: any) {
-            Alert.alert('Erro', 'Não foi possível carregar as opções de divisão.');
-            console.error("Erro ao buscar opções de divisão:", error);
-        } finally {
-            setLoading(false);
-        }
-    }, []); */
-
 
     const fetchAndCacheSplitOptions = useCallback(async (optionsFromCache?: SplitTypeOption[]) => {
         console.log("[SelectSplitTypeScreen] A buscar opções de divisão do Supabase...");
@@ -129,10 +110,6 @@ export default function SelectSplitTypeScreen() {
         fetchAndCacheSplitOptions();
     }, [fetchAndCacheSplitOptions]);
 
-    /* useEffect(() => {
-        fetchSplitOptions();
-    }, [fetchSplitOptions]); */
-
     useFocusEffect(
         useCallback(() => {
             loadOptionsOnMountOrFocus();
@@ -156,30 +133,25 @@ export default function SelectSplitTypeScreen() {
         }
     };
 
-    /* const handleSelectOption = async (option: SplitTypeOption) => {
-        setSelectedOptionId(option.id);
-        console.log("[SelectSplitTypeScreen] Opção selecionada:", option);
-        try {
-            await AsyncStorage.setItem('selected_split_option', JSON.stringify(option));
-            console.log("[SelectSplitTypeScreen] Opção guardada no AsyncStorage.");
-            console.log("[SelectSplitTypeScreen] router.canGoBack().", router.canGoBack());
-
-            if (router.canGoBack()) {
-                console.log("[SelectSplitTypeScreen] A voltar para o ecrã anterior.");
-                router.back();
-            } else {
-                console.warn("[SelectSplitTypeScreen] Não é possível voltar, a navegar para /add-expense como fallback.");
-                router.replace('/(tabs)'); // Ou para a sua rota principal
-            }
-        } catch (e) {
-            console.error("[SelectSplitTypeScreen] Erro ao guardar opção ou navegar:", e);
-            Alert.alert("Erro", "Não foi possível guardar a sua seleção.");
-        }
-    }; */
-
     if (pageLoading && options.length === 0) {
         return <View style={styles.loadingContainer}><ActivityIndicator size="large" color="#007AFF" /></View>;
     }
+
+    useEffect(() => {
+        navigation.setOptions({
+            presentation: 'modal',
+            headerShown: true, // Garante que o header é mostrado
+            title: 'Como foi pago?',
+            gestureEnabled: true, 
+            headerLeft: () => ( 
+                Platform.OS === 'ios' ? (
+                <TouchableOpacity onPress={() => router.back()} style={{ marginLeft: 10 }}>
+                    <Ionicons name="close" size={28} color="#007AFF" />
+                </TouchableOpacity>
+                ) : null
+            )// Estilo para a barra do header
+        });
+    }, [navigation, router]);
 
     const renderItem = ({ item }: { item: SplitTypeOption }) => {
         const description = item.description_template.replace('{friendIdName}', friendName);
@@ -197,20 +169,6 @@ export default function SelectSplitTypeScreen() {
 
     return (
         <View style={[styles.screenContainer, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>          
-            <Stack.Screen
-                options={{
-                title: 'Como foi pago?',
-                presentation: 'modal',
-                gestureEnabled: true, 
-                headerLeft: () => ( 
-                    Platform.OS === 'ios' ? (
-                    <TouchableOpacity onPress={() => router.back()} style={{ marginLeft: 10 }}>
-                        <Ionicons name="close" size={28} color="#007AFF" />
-                    </TouchableOpacity>
-                    ) : null
-                ),
-                }}
-            />
             <Text style={styles.title}>Como é que esta despesa foi paga?</Text>
             {isRefreshing && options.length > 0 && ( 
                 <View style={styles.inlineLoadingContainer}>

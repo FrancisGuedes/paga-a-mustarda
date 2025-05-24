@@ -3,7 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../config/supabase'; // Ajuste o caminho
 
@@ -50,7 +50,7 @@ export default function SelectSplitTypeScreen() {
         fetchSplitOptions();
     }, [fetchSplitOptions]);
 
-    const handleSelectOption = (option: SplitTypeOption) => {
+    /* const handleSelectOption = (option: SplitTypeOption) => {
         setSelectedOptionId(option.id);
         // Em vez de navegar de volta, usamos o router para passar os dados para a rota anterior
         // O Expo Router não tem um sistema de "retorno com resultado" tão direto como o React Navigation clássico.
@@ -83,6 +83,27 @@ export default function SelectSplitTypeScreen() {
                 router.back();
             });
         }
+    }; */
+
+    const handleSelectOption = async (option: SplitTypeOption) => {
+        setSelectedOptionId(option.id);
+        console.log("[SelectSplitTypeScreen] Opção selecionada:", option);
+        try {
+            await AsyncStorage.setItem('selected_split_option', JSON.stringify(option));
+            console.log("[SelectSplitTypeScreen] Opção guardada no AsyncStorage.");
+            console.log("[SelectSplitTypeScreen] router.canGoBack().", router.canGoBack());
+
+            if (router.canGoBack()) {
+                console.log("[SelectSplitTypeScreen] A voltar para o ecrã anterior.");
+                router.back();
+            } else {
+                console.warn("[SelectSplitTypeScreen] Não é possível voltar, a navegar para /add-expense como fallback.");
+                router.replace('/(tabs)'); // Ou para a sua rota principal
+            }
+        } catch (e) {
+            console.error("[SelectSplitTypeScreen] Erro ao guardar opção ou navegar:", e);
+            Alert.alert("Erro", "Não foi possível guardar a sua seleção.");
+        }
     };
 
     if (loading) {
@@ -105,14 +126,29 @@ export default function SelectSplitTypeScreen() {
 
     return (
         <View style={[styles.screenContainer, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-            <Stack.Screen options={{ title: 'Como foi pago?', presentation: 'modal' }} />
-        <Text style={styles.title}>Como é que esta despesa foi paga?</Text>
-        <FlatList
-            data={options}
-            renderItem={renderItem}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={styles.listContent}
-        />
+{/*             <Stack.Screen options={{ title: 'Como foi pago?', presentation: 'modal' }} />
+ */}            
+            <Stack.Screen
+                options={{
+                title: 'Como foi pago?',
+                presentation: 'modal', // Garante que é um modal
+                gestureEnabled: true, // Garante que os gestos para fechar modais estão ativos
+                headerLeft: () => ( // Adiciona um botão de fechar explícito para iOS se o gesto não for suficiente
+                    Platform.OS === 'ios' ? (
+                    <TouchableOpacity onPress={() => router.back()} style={{ marginLeft: 10 }}>
+                        <Ionicons name="close" size={28} color="#007AFF" />
+                    </TouchableOpacity>
+                    ) : null
+                ),
+                }}
+            />
+            <Text style={styles.title}>Como é que esta despesa foi paga?</Text>
+            <FlatList
+                data={options}
+                renderItem={renderItem}
+                keyExtractor={(item) => item.id}
+                contentContainerStyle={styles.listContent}
+            />
         </View>
     );
 }

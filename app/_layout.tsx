@@ -65,13 +65,6 @@ function ProtectedNavigation() {
       <Stack.Screen name="(tabs)" /> {/* O (tabs) tem o seu próprio _layout.tsx para definir as Tabs */}
       <Stack.Screen name="(auth)/login" /> {/* O (auth) tem o seu próprio _layout.tsx para a stack de auth */}
       
-      {/* Ecrãs Modais definidos na raiz de app/ */}
-      {/* <Stack.Screen 
-        name="add-expense" // app/add-expense.tsx
-        options={{ 
-          presentation: 'modal',
-        }} 
-      /> */}
       <Stack.Screen 
         name="select-split-type" // app/select-split-type.tsx
         options={{ 

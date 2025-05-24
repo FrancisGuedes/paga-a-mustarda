@@ -298,21 +298,26 @@ export default function AddExpenseScreen() {
                 setIsSaving(false);
                 return;
         }
+
+        console.log("[AddExpense] User Share:", userShare, "Split type:", selectedSplitOption.split_type);
         try {
             const newExpense = {
                 user_id: auth.user.id,
                 friend_id: selectedFriend?.id,
                 description: description.trim(),
                 total_amount: numericAmount,
-                user_share: userShare,
                 date: expenseDate,
+                updated_at: new Date().toISOString(),
                 paid_by_user: selectedSplitOption.user_pays_total,
+                user_share: userShare,
             };
-            await supabase
+            console.log("[AddExpense] A inserir nova despesa");
+            const {data: insertNewExpense, error: insertNewExpenseError} = await supabase
                 .from("expenses")
                 .insert([newExpense])
                 .single()
                 .throwOnError();
+            console.log("[AddExpense] Nova despesa inserida:", insertNewExpense);
             if (selectedFriend?.id) {
                 const { data: friendData, error: friendFetchError } = await supabase
                     .from("friends")
@@ -320,19 +325,25 @@ export default function AddExpenseScreen() {
                     .eq("user_id", auth.user.id)
                     .eq("id", selectedFriend.id)
                     .single();
+                console.log("[AddExpense] Dados do amigo:", friendData);
+                
                 if (friendFetchError && friendFetchError.code !== "PGRST116")
                     throw friendFetchError;
                 const currentFriendBalance = friendData?.balance || 0;
+                console.log("[AddExpense] Balanço do amigo:", currentFriendBalance);
                 const newFriendBalance = currentFriendBalance + userShare;
-                await supabase
+                console.log("[AddExpense] Balanço atual do amigo a ser atualizado:", currentFriendBalance);
+                const {data: updateBalance, error: updateBalanceError} = await supabase
                     .from("friends")
                     .update({
                         balance: newFriendBalance,
                         updated_at: new Date().toISOString(),
                     })
-                    .eq("user_id", auth.user.id)
                     .eq("id", selectedFriend.id)
+                    .eq("user_id", auth.user.id)
+                    .select()
                     .throwOnError();
+                console.log("[AddExpense] Balanço do amigo atualizado:", updateBalance);
             }
             Alert.alert("Sucesso", "Despesa adicionada!");
             await AsyncStorage.removeItem(ASYNC_STORAGE_SELECTED_SPLIT_OPTION_KEY);
@@ -403,7 +414,6 @@ export default function AddExpenseScreen() {
         });
     }, [navigation, canSaveChanges, isSaving, handleSaveExpense, router]);
 
-    // ... (JSX de renderização condicional e principal - mantido igual à versão anterior do Canvas) ...
     if (!selectedFriend && !params.friendId && isLoadingSplitOption) {
         return (
             <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -434,6 +444,7 @@ export default function AddExpenseScreen() {
             </View>
         );
     }
+    
     if (params.friendId && !selectedFriend) {
         return (
             <View style={[styles.container, { paddingTop: insets.top }]}>

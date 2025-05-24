@@ -46,19 +46,6 @@ export default function TabLayout() {
           tabBarIcon: ({ color, size }) => <MaterialCommunityIcons name="account-group-outline" size={size} color={color} />,
         }}
       />
-      {/* <Tabs.Screen
-        name="add-expense"
-        options={{
-          title: 'Adicionar',
-          tabBarIcon: ({ color, size }) => <Ionicons name="add-circle" size={size + 10} color={color} />,
-        }}
-        listeners={{
-            tabPress: e => {
-              e.preventDefault();
-              router.push('/add-expense');
-            },
-          }}
-      /> */}
       <Tabs.Screen
         name="add-expense-entry" // Corresponde a app/(tabs)/add-expense-entry.tsx
         options={{
@@ -133,7 +120,8 @@ export default function TabLayout() {
           href: null,
         }}
       />
-      <Tabs.Screen name="add-expense" 
+      <Tabs.Screen 
+        name="add-expense" 
         options={{ 
           href: null 
         }} 

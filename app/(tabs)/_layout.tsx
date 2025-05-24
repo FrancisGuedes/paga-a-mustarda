@@ -1,4 +1,4 @@
-import { Tabs, useRouter, useSegments } from 'expo-router';
+import { Tabs, useRouter, useSegments, Stack } from 'expo-router';
 import React from 'react';
 import { Platform } from 'react-native';
 
@@ -132,6 +132,11 @@ export default function TabLayout() {
         options={{
           href: null,
         }}
+      />
+      <Tabs.Screen name="add-expense" 
+        options={{ 
+          href: null 
+        }} 
       />
     </Tabs>
   );

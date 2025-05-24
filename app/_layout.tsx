@@ -1,6 +1,6 @@
 // app/_layout.tsx
 import React, { useEffect } from 'react';
-import { Slot, SplashScreen, useRouter, useSegments } from 'expo-router';
+import { Slot, SplashScreen, useRouter, useSegments, Stack } from 'expo-router';
 import { AuthProvider, useAuth } from '../context/AuthContext';
 import { FriendProvider } from '../context/FriendContext';
 import { ActivityIndicator, View, StyleSheet, LogBox } from 'react-native';
@@ -17,49 +17,76 @@ LogBox.ignoreLogs([/AsyncStorage/]); // Ignora todos os avisos contendo AsyncSto
 // Impede que o ecrã de splash desapareça automaticamente antes de termos o estado de autenticação
 SplashScreen.preventAutoHideAsync();
 
-function RootLayoutNav() {
+function ProtectedNavigation() {
   const { auth } = useAuth();
-  const segments = useSegments();
+  const segments = useSegments(); // segmentos da rota atual a partir da raiz de 'app'
   const router = useRouter();
 
   useEffect(() => {
-    console.log("Auth state changed: ", auth.user, auth.isLoading);
+    console.log("[ProtectedNavigation] Auth state changed: ", auth.user ? auth.user.id : 'null', "isLoading:", auth.isLoading);
+    console.log("[ProtectedNavigation] Current segments: ", segments);
+
     if (auth.isLoading) {
-      // Ainda a carregar, não fazemos nada, o SplashScreen está visível
-      return;
+      console.log("[ProtectedNavigation] Auth is loading, returning null (SplashScreen is active).");
+      return; // SplashScreen está ativo
     }
 
-    // Quando o carregamento da autenticação terminar, escondemos o SplashScreen
-    SplashScreen.hideAsync();
+    SplashScreen.hideAsync().catch(error => console.warn("[ProtectedNavigation] Erro ao esconder SplashScreen:", error));
 
-    const inAuthGroup = String(segments[0]) === '(auth)'; // Verifica se estamos no grupo de rotas de autenticação
+    const inAuthPages = segments[0] === '(auth)'; // Estamos no grupo de autenticação?
 
-    if (!auth.user && !inAuthGroup) {
-      // Se não há utilizador e não estamos no fluxo de autenticação, redireciona para login
-      router.replace('/(auth)/login'); // Ajuste o caminho para o seu ecrã de login no Expo Router
-    } else if (auth.user && inAuthGroup) {
-      // Se há utilizador e estamos no fluxo de autenticação (ex: veio do login),
-      // redireciona para a página principal da app (ex: o grupo de tabs)
-      console.log('[AppLayout] Com utilizador E está no grupo auth. A redirecionar para tabs...');
+    if (!auth.user && !inAuthPages) {
+      // Se não há utilizador e NÃO estamos no grupo (auth), redireciona para login
+      console.log("[ProtectedNavigation] No user, not in auth pages. Redirecting to login.");
+      router.replace('/(auth)/login');
+    } else if (auth.user && inAuthPages) {
+      // Se há utilizador e estamos no grupo (auth) (ex: acabou de fazer login), redireciona para tabs
+      console.log("[ProtectedNavigation] User exists, and in auth pages. Redirecting to tabs.");
       router.replace('/(tabs)');
+    } else {
+      console.log("[ProtectedNavigation] Navigation state is stable or handled by current route.");
     }
   }, [auth.isLoading, auth.user, segments, router]);
 
   if (auth.isLoading) {
-    // Pode mostrar um ecrã de loading aqui se preferir em vez do SplashScreen,
-    // mas o SplashScreen.preventAutoHideAsync() já trata disso.
-    // Retornar null ou um ecrã de loading simples enquanto o SplashScreen está ativo.
+    // Mostra um loading enquanto o estado de autenticação é determinado
+    // O SplashScreen deve cobrir isto, mas é um fallback.
     return (
-        <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#FFA000" />
-        </View>
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#FFA000" />
+      </View>
     );
   }
 
-  // O <Slot /> renderiza a rota atual correspondente baseada na navegação do Expo Router.
-  // Se o utilizador não estiver autenticado e tentar aceder a uma rota protegida,
-  // o useEffect acima irá redirecioná-lo.
-  return <Slot />;
+  // Se autenticado, ou no fluxo de autenticação, o Stack abaixo define as rotas.
+  // A lógica de redirecionamento no useEffect já tratou de nos colocar no caminho certo.
+  return (
+    <Stack screenOptions={{ headerShown: false /* Oculta headers por defeito para a Stack raiz */ }}>
+      <Stack.Screen name="(tabs)" /> {/* O (tabs) tem o seu próprio _layout.tsx para definir as Tabs */}
+      <Stack.Screen name="(auth)" /> {/* O (auth) tem o seu próprio _layout.tsx para a stack de auth */}
+      
+      {/* Ecrãs Modais definidos na raiz de app/ */}
+      <Stack.Screen 
+        name="add-expense" // app/add-expense.tsx
+        options={{ 
+          presentation: 'modal',
+          // O título e os botões de header são definidos DENTRO de add-expense.tsx
+          // usando navigation.setOptions ou <Stack.Screen options={...} /> lá.
+          // Se quiser um título default aqui: title: 'Adicionar Despesa'
+          // headerShown: true, // Para garantir que o modal tem header
+        }} 
+      />
+      <Stack.Screen 
+        name="select-split-type" // app/select-split-type.tsx
+        options={{ 
+          presentation: 'modal',
+          // title: 'Como foi pago?',
+          // headerShown: true,
+        }} 
+      />
+      <Stack.Screen name="+not-found" />
+    </Stack>
+  );
 }
 
 export default function RootLayout() {
@@ -67,7 +94,7 @@ export default function RootLayout() {
     <SafeAreaProvider> 
       <AuthProvider>
         <FriendProvider>
-          <RootLayoutNav />
+          <ProtectedNavigation />
         </FriendProvider>
       </AuthProvider>
     </SafeAreaProvider>
@@ -81,4 +108,4 @@ const styles = StyleSheet.create({
       alignItems: 'center',
       backgroundColor: '#fff', // Ou a cor de fundo do seu tema
     },
-  });
+});

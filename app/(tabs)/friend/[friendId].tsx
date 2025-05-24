@@ -2,7 +2,7 @@
 // app/(tabs)/friend/[friendId].tsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Alert, Button, RefreshControl, Platform, StatusBar, Image, TouchableOpacity } from 'react-native';
-import { useLocalSearchParams, Stack, useFocusEffect, useRouter } from 'expo-router';
+import { useLocalSearchParams, Stack, useFocusEffect, useRouter, useNavigation } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../../../config/supabase';
@@ -43,6 +43,7 @@ export default function FriendExpensesScreen() {
     const [error, setError] = useState<string | null>(null);
     const insets = useSafeAreaInsets();
     const router = useRouter();
+    const navigation = useNavigation();
     
 
     // O nome do amigo é passado como parâmetro de query na navegação
@@ -166,7 +167,7 @@ export default function FriendExpensesScreen() {
                 console.log("[FriendExpensesScreen] Desfocado/Desmontado. Limpando amigo atual do contexto.");
                 setCurrentFriend(null); // Limpa o amigo atual ao sair do ecrã
             };
-            
+
         }, [auth.user, auth.isLoading, routeFriendId, friendName, routeFriendAvatarUrl, setCurrentFriend, loadExpenses, expenses.length, getExpensesStorageKey])
         //}, [auth.user, auth.isLoading, routeFriendId, loadExpenses, getExpensesStorageKey, expenses.length])
     );
@@ -240,14 +241,14 @@ export default function FriendExpensesScreen() {
 
         <View style={styles.actionButtonsContainer}>
             <TouchableOpacity style={[styles.actionButton, styles.liquidarButton]}>
-            <Text style={[styles.actionButtonText, styles.liquidarButtonText]}>Liquidar contas</Text>
+                <Text style={[styles.actionButtonText, styles.liquidarButtonText]}>Liquidar contas</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.actionButton, styles.lembrarButton]}>
-            <Text style={styles.actionButtonText}>Lembrar...</Text>
+                <Text style={styles.actionButtonText}>Lembrar...</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.actionButton, styles.graficosButton]}>
-            <Ionicons name="stats-chart-outline" size={18} color="#4A90E2" />
-            <Text style={[styles.actionButtonText, {color: '#4A90E2', marginLeft: 5}]}>Gráficos</Text>
+                <Ionicons name="stats-chart-outline" size={18} color="#4A90E2" />
+                <Text style={[styles.actionButtonText, {color: '#4A90E2', marginLeft: 5}]}>Gráficos</Text>
             </TouchableOpacity>
         </View>
 
@@ -264,9 +265,9 @@ export default function FriendExpensesScreen() {
             }
         >
             {monthSections.length === 0 && !loading && (
-            <Text style={styles.noExpensesText}>
-                {error ? `Erro: ${error}` : `Ainda não há despesas com ${friendName}.`}
-            </Text>
+                <Text style={styles.noExpensesText}>
+                    {error ? `Erro: ${error}` : `Ainda não há despesas com ${friendName}.`}
+                </Text>
             )}
             {error && monthSections.length === 0 && <Button title="Tentar Novamente" onPress={() => loadExpenses({ forceNetwork: true, isPullToRefresh: true })} />}
 

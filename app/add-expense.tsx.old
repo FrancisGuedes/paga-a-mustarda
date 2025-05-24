@@ -13,7 +13,7 @@ import {
   ScrollView,
   Button,
 } from 'react-native';
-import { Stack, useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { Stack, useRouter, useLocalSearchParams, useFocusEffect, useNavigation } from 'expo-router';
 import { supabase } from '../config/supabase';
 import { useAuth } from '../context/AuthContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -21,16 +21,26 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { SplitTypeOption } from './select-split-type'; // Assume que este tipo está definido em app/select-split-type.tsx
 
+interface AddExpenseScreenNavParams {
+  friendId?: string;
+  friendName?: string;
+  friendAvatarUrl?: string;
+}
+
+const ASYNC_STORAGE_SELECTED_SPLIT_OPTION_KEY = 'selected_split_option';
+
 export default function AddExpenseScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{friendId?: string; friendName?: string; currentOptionId?: string}>();
   const { auth } = useAuth();
+  const navigation = useNavigation();
   const insets = useSafeAreaInsets();
 
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
   const [selectedFriend, setSelectedFriend] = useState<{ id: string; name: string; avatarUrl?: string } | null>(null);
   const [selectedSplitOption, setSelectedSplitOption] = useState<SplitTypeOption | null>(null);
+  const [isLoadingSplitOption, setIsLoadingSplitOption] = useState(true);
   const [displaySplitText, setDisplaySplitText] = useState('A carregar opção...');
   const [isSaving, setIsSaving] = useState(false);
 
@@ -45,7 +55,8 @@ export default function AddExpenseScreen() {
         console.log("[AddExpenseScreen] Amigo definido/mudou para:", newFriend.name);
         setSelectedFriend(newFriend);
         setSelectedSplitOption(null); // Reseta a opção de divisão para o novo amigo
-        setDisplaySplitText('A carregar opção...'); // Mostra texto de loading para a opção
+        setDisplaySplitText('A carregar opção...'); // Mostra texto de loading para a opçã
+        setIsLoadingSplitOption(true);
       }
     } else if (!friendId && selectedFriend !== null) {
       // Se navegou para cá sem friendId (ex: adicionar despesa genérica), limpa o amigo selecionado
@@ -53,43 +64,45 @@ export default function AddExpenseScreen() {
       setSelectedFriend(null);
       setSelectedSplitOption(null);
       setDisplaySplitText('Pago por si e dividido em partes iguais'); // Default genérico
+      setIsLoadingSplitOption(true);
     }
   }, [params, selectedFriend?.id]); // Adicionado selectedFriend?.id para reavaliar se ele for limpo
 
   // Função para carregar a opção de divisão (do AsyncStorage ou default do Supabase)
-  const loadSplitOption = useCallback(async (currentFriendName: string | undefined) => {
-    console.log("[loadSplitOption] A tentar carregar opção de divisão para o amigo:", currentFriendName || "genérico");
+  const loadSplitOption = useCallback(async () => {
+    console.log("[loadSplitOption] Iniciando. Amigo atual:", selectedFriend?.name);
+    setIsLoadingSplitOption(true);
+    setDisplaySplitText('A carregar opção...');
+    let optionToSet: SplitTypeOption | null = null;
+
     try {
-      const storedOptionJson = await AsyncStorage.getItem('selected_split_option');
+      const storedOptionJson = await AsyncStorage.getItem(ASYNC_STORAGE_SELECTED_SPLIT_OPTION_KEY);
       if (storedOptionJson) {
-        const storedOption = JSON.parse(storedOptionJson) as SplitTypeOption;
-        console.log("[loadSplitOption] Opção carregada do AsyncStorage:", storedOption.description_template);
-        setSelectedSplitOption(storedOption);
-        // AsyncStorage.removeItem('selected_split_option'); // Limpa após usar para não afetar a próxima despesa
-        return; // Já temos uma opção do seletor
-      }
-
-      // Se não há nada no AsyncStorage, busca a default do Supabase
-      console.log("[loadSplitOption] Nenhuma opção no cache, buscando default (sort_order = 1) do Supabase...");
-      const { data, error } = await supabase
-        .from('expense_split_options')
-        .select('*')
-        .eq('sort_order', 1)
-        .maybeSingle();
-
-      if (error && error.code !== 'PGRST116') throw error; // Ignora erro se não encontrar (PGRST116)
-
-      if (data) {
-        console.log("[loadSplitOption] Opção default carregada do Supabase:", data.description_template);
-        setSelectedSplitOption(data as SplitTypeOption);
+        optionToSet = JSON.parse(storedOptionJson) as SplitTypeOption;
+        console.log("[loadSplitOption] Opção carregada do AsyncStorage:", optionToSet.description_template);
+        // Não limpar do AsyncStorage aqui; limpar após guardar a despesa
       } else {
-        console.log("[loadSplitOption] Nenhuma opção default (sort_order=1) encontrada no Supabase.");
-        setSelectedSplitOption(null); // Garante que é null se não houver default
+        console.log("[loadSplitOption] Nenhuma opção no cache, buscando default (sort_order = 1) do Supabase...");
+        const { data, error } = await supabase
+          .from('expense_split_options')
+          .select('*')
+          .eq('sort_order', 1)
+          .maybeSingle();
+
+        if (error && error.code !== 'PGRST116') throw error;
+        if (data) {
+          optionToSet = data as SplitTypeOption;
+          console.log("[loadSplitOption] Opção default carregada do Supabase:", optionToSet.description_template);
+        } else {
+          console.log("[loadSplitOption] Nenhuma opção default (sort_order=1) encontrada no Supabase.");
+        }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro ao carregar opção de divisão em loadSplitOption:", error);
-      setSelectedSplitOption(null); // Garante que é null em caso de erro
       Alert.alert("Erro", "Não foi possível carregar as opções de divisão.");
+    } finally {
+      setSelectedSplitOption(optionToSet);
+      setIsLoadingSplitOption(false);
     }
   }, []); // Este useCallback não tem dependências diretas de estado que ele mesmo modifica
 
@@ -99,7 +112,7 @@ export default function AddExpenseScreen() {
       console.log("AddExpenseScreen focado. Amigo selecionado:", selectedFriend?.name);
       // Carrega a opção de divisão (do AsyncStorage ou default)
       // A lógica interna de loadSplitOption decidirá se busca do Supabase ou usa o cache.
-      loadSplitOption(selectedFriend?.name);
+      loadSplitOption();
     }, [selectedFriend, loadSplitOption])
   );
 
@@ -162,7 +175,12 @@ export default function AddExpenseScreen() {
         // category_icon: 'nome_do_icone' // Adicionar mais tarde
       };
       console.log("A guardar despesa:", newExpense);
-      const { error: expenseError } = await supabase.from('expenses').insert([newExpense]).select().single().throwOnError();
+      const { error: expenseError } = await supabase
+        .from('expenses')
+        .insert([newExpense])
+        .select()
+        .single()
+        .throwOnError();
       // throwOnError() já lança o erro se houver
 
       // 2. Atualizar o 'balance' na tabela 'friends'
@@ -205,113 +223,167 @@ export default function AddExpenseScreen() {
     }
   };
 
-  const canSaveChanges = description.trim() !== '' && amount.trim() !== '' && parseFloat(amount.replace(',', '.')) > 0 && selectedSplitOption !== null;
+  const canSaveChanges = 
+    description.trim() !== '' && 
+    amount.trim() !== '' && 
+    parseFloat(amount.replace(',', '.')) > 0 && 
+    selectedSplitOption !== null && // <-- CORRIGIDO AQUI
+    !isLoadingSplitOption;
 
+  useEffect(() => {
+    console.log(`[setOptions Effect] Executando. canSaveChanges: ${canSaveChanges}, isSaving: ${isSaving}`);
+
+    /* navigation.setOptions({
+      headerLeft: () => ( 
+        Platform.OS === 'ios' ? (
+          <TouchableOpacity onPress={() => router.back()} style={{ marginLeft: 10 }}>
+            <Ionicons name="close" size={28} color="#007AFF" />
+          </TouchableOpacity>
+        ) : null
+      ),
+      headerRight: () => (
+        <TouchableOpacity onPress={handleSaveExpense} disabled={!canSaveChanges || isSaving}>
+          <Text style={[styles.saveButton, (!canSaveChanges || isSaving) && styles.saveButtonDisabled]}>
+            {isSaving ? 'A guardar...' : 'Guardar'}
+          </Text>
+        </TouchableOpacity>
+      ),
+    }); */
+  }, [navigation, canSaveChanges, isSaving, handleSaveExpense]); 
+
+  
+
+  console.log("[canSaveChanges] Estado de pode guardar mudanças:", canSaveChanges, "| Descrição:", description, "| Valor:", amount, "| Opção selecionada:", selectedSplitOption);
+  console.log("[isSaving] isSaving:", isSaving);
+  console.log("[isLoadingSplitOption] isLoadingSplitOption:", isLoadingSplitOption);
   // Se não há amigo selecionado (ex: vindo do "+" genérico da tab bar)
-  if (!selectedFriend) {
-    // TODO: Implementar uma UI para selecionar um amigo aqui
-    // Por agora, mostra uma mensagem e um botão para voltar.
+  if (!selectedFriend && !params.friendId && !isLoadingSplitOption) {
+    // TODO: Implementar UI para selecionar um amigo aqui
     return (
         <View style={[styles.container, {paddingTop: insets.top}]}>
-            <Stack.Screen options={{ 
-              presentation: 'modal',
-              title: 'Adicionar Despesa' 
-              }} />
-            <Text style={styles.infoText}>Primeiro, precisa de selecionar um amigo.</Text>
+            <Stack.Screen options={{ presentation: 'modal', title: 'Adicionar Despesa' }} />
+            <Text style={styles.infoText}>Com quem partilhou esta despesa?</Text>
             <Text style={styles.infoSubText}>(UI de seleção de amigo a ser implementada)</Text>
             <View style={{marginTop: 20}}>
-                <Button title="Voltar para Amigos" onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)')} />
+                <Button title="Cancelar" onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)')} />
             </View>
         </View>
     );
   }
 
+  if (params.friendId && !selectedFriend) { 
+      return ( <View style={[styles.container, {paddingTop: insets.top}]}><Stack.Screen options={{ presentation: 'modal', title: 'Adicionar Despesa' }} /><ActivityIndicator size="large" color="#007AFF" /><Text>A carregar dados do amigo...</Text></View> );
+  }
+
+  const handleSaveExpenses = () => {
+    Alert.alert("Guardar (Teste)", "Botão Guardar premido!");
+  };
+
   return (
-    <View style={[styles.screenContainer, { paddingTop: insets.top }]}>
+    <>
+    {/* <View style={[styles.screenContainer, { paddingTop: insets.top }]}>
+      <Stack.Screen options={{ 
+        presentation: 'modal', 
+        title: 'Adicionar uma despesa',
+        }} />
+      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+        {selectedFriend && ( 
+            <View style={styles.friendSelector}>
+            <Text style={styles.withUserText}>Com:</Text>
+            {selectedFriend.avatarUrl && selectedFriend.avatarUrl !== 'placeholder' ? (
+                <Image source={{uri: selectedFriend.avatarUrl}} style={styles.friendAvatar} />
+            ) : ( <View style={styles.friendAvatarPlaceholder} /> )}
+            <Text style={styles.friendName}>{selectedFriend.name}</Text>
+            </View>
+        )}
+        <View style={styles.inputContainer}><Ionicons name="document-text-outline" size={24} color="#888" style={styles.inputIcon} /><TextInput style={styles.inputDescription} placeholder="Insira a descrição" value={description} onChangeText={setDescription} placeholderTextColor="#B0B0B0" /></View>
+        <View style={styles.inputContainer}><Text style={styles.currencySymbol}>€</Text><TextInput style={styles.inputAmount} placeholder="0,00" value={amount} onChangeText={setAmount} keyboardType="decimal-pad" placeholderTextColor="#B0B0B0" /></View>
+        <TouchableOpacity
+          style={[styles.splitTypeButton, !selectedFriend && styles.disabledSplitButton]} // Desativa se não houver amigo
+          onPress={() => {
+            if (selectedFriend) { // Só permite navegar se houver amigo
+              router.push({
+                pathname: '/select-split-type', 
+                params: { friendName: selectedFriend.name, currentOptionId: selectedSplitOption?.id }
+              })
+            }
+          }}
+          disabled={!selectedFriend || isLoadingSplitOption} // Desativa se não houver amigo ou se estiver a carregar opção
+        >
+          <Text style={styles.splitTypeButtonText}>{displaySplitText}</Text>
+          <Ionicons name="chevron-forward" size={20} color={!selectedFriend || isLoadingSplitOption ? "#ccc" : "#888"} />
+        </TouchableOpacity>
+        <View style={styles.bottomControls}><TouchableOpacity style={styles.controlButton}><Ionicons name="calendar-outline" size={20} color="#555" style={styles.controlIcon} /><Text>Hoje</Text></TouchableOpacity><TouchableOpacity style={styles.controlButton}><Ionicons name="people-outline" size={20} color="#555" style={styles.controlIcon} /><Text>Sem grupo</Text></TouchableOpacity></View>
+      </ScrollView>
+      {isSaving && ( <View style={styles.loadingOverlay}><ActivityIndicator size="large" color="#fff" /><Text style={styles.loadingText}>A guardar...</Text></View> )}
+    </View> */}
+    <View style={[stylesT.screenContainer, { paddingTop: insets.top }]}>
       <Stack.Screen
         options={{
           presentation: 'modal',
-          title: 'Adicionar uma despesa',
+          headerShown: true, // Garante que o header é mostrado
+          title: 'Adicionar Despesa (Simples)', // Título como na imagem
+          headerLeft: () => (
+            Platform.OS === 'ios' ? (
+              <TouchableOpacity onPress={() => router.back()} style={stylesT.headerButton}>
+                <Ionicons name="close" size={28} color="#000000" /> {/* Ícone X preto */}
+              </TouchableOpacity>
+            ) : null
+          ),
           headerRight: () => (
-            <TouchableOpacity onPress={handleSaveExpense} disabled={!canSaveChanges || isSaving}>
-              <Text style={[styles.saveButton, (!canSaveChanges || isSaving) && styles.saveButtonDisabled]}>
-                Guardar
+            // Botão "Guardar" estático e sempre ativo para teste
+            <TouchableOpacity onPress={handleSaveExpenses} style={stylesT.headerButton}>
+              <Text style={stylesT.saveButtonText}>
+                Guardar (Estático)
               </Text>
             </TouchableOpacity>
           ),
         }}
       />
-      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-        <View style={styles.friendSelector}>
-          <Text style={styles.withUserText}>Com:</Text>
-          {selectedFriend.avatarUrl && selectedFriend.avatarUrl !== 'placeholder' ? (
-            <Image source={{uri: selectedFriend.avatarUrl}} style={styles.friendAvatar} />
-          ) : (
-            <View style={styles.friendAvatarPlaceholder} />
-          )}
-          <Text style={styles.friendName}>{selectedFriend.name}</Text>
-        </View>
-
-        <View style={styles.inputContainer}>
-          <Ionicons name="document-text-outline" size={24} color="#888" style={styles.inputIcon} />
-          <TextInput
-            style={styles.inputDescription}
-            placeholder="Insira a descrição"
-            value={description}
-            onChangeText={setDescription}
-            placeholderTextColor="#B0B0B0"
-          />
-        </View>
-
-        <View style={styles.inputContainer}>
-          <Text style={styles.currencySymbol}>€</Text>
-          <TextInput
-            style={styles.inputAmount}
-            placeholder="0,00"
-            value={amount}
-            onChangeText={setAmount}
-            keyboardType="decimal-pad" // Melhor para valores monetários
-            placeholderTextColor="#B0B0B0"
-          />
-        </View>
-
-        <TouchableOpacity
-          style={styles.splitTypeButton}
-          onPress={() => router.push({
-            pathname: '/select-split-type', 
-            params: { friendName: selectedFriend.name, currentOptionId: selectedSplitOption?.id }
-          })}
-        >
-          <Text style={styles.splitTypeButtonText}>{displaySplitText}</Text>
-          <Ionicons name="chevron-forward" size={20} color="#888" />
-        </TouchableOpacity>
-
-        <View style={styles.bottomControls}>
-            <TouchableOpacity style={styles.controlButton}>
-                <Ionicons name="calendar-outline" size={20} color="#555" style={styles.controlIcon} />
-                <Text>Hoje</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.controlButton}>
-                <Ionicons name="people-outline" size={20} color="#555" style={styles.controlIcon} />
-                <Text>Sem grupo</Text>
-            </TouchableOpacity>
-        </View>
-
-      </ScrollView>
-      {isSaving && (
-        <View style={styles.loadingOverlay}>
-          <ActivityIndicator size="large" color="#fff" />
-          <Text style={styles.loadingText}>A guardar...</Text>
-        </View>
-      )}
+      <View style={stylesT.content}>
+        <Text style={styles.infoText}>Ecrã Adicionar Despesa (Conteúdo de Teste)</Text>
+        <TextInput
+          style={stylesT.testInput}
+          placeholder="Descrição da Despesa"
+          value={description}
+          onChangeText={setDescription}
+        />
+        <TextInput
+          style={stylesT.testInput}
+          placeholder="Valor"
+          value={amount}
+          onChangeText={setAmount}
+          keyboardType="numeric"
+        />
+        <Text>Can Save Changes: {String(canSaveChanges)}</Text>
+        <Text>Is Saving: {String(isSaving)}</Text>
+        <Text>Is Loading Split Option: {String(isLoadingSplitOption)}</Text>
+        <Text>Selected Split Option: {selectedSplitOption ? "Sim" : "Não"}</Text>
+      </View>
     </View>
+
+      <Stack.Screen
+        options={{
+          title: 'My home',
+          headerStyle: { backgroundColor: '#f4511e' },
+          headerTintColor: '#fff',
+          headerTitleStyle: {
+            fontWeight: 'bold',
+          },
+          headerTitle: props => <Image style={styles.container} source={{ uri: 'https://reactnative.dev/img/tiny_logo.png' }} />,
+        }}
+      />
+
+      <Text style={{ top: 100 ,fontSize: 24, fontWeight: 'bold', marginBottom: 20 }}>{displaySplitText}</Text>
+
+    </>
   );
 }
 
 const styles = StyleSheet.create({
   screenContainer: { flex: 1, backgroundColor: '#F4F6F8', },
-  scrollContent: { padding: 20, flexGrow: 1 }, // Adicionado flexGrow para melhor comportamento do KeyboardAvoidingView
-  saveButton: { color: '#007AFF', fontSize: 17, fontWeight: '500', marginRight: Platform.OS === 'ios' ? 0 : 10, },
+  scrollContent: { padding: 20, flexGrow: 1 },
+  saveButton: { color: '#007AFF', fontSize: 17, fontWeight: '500', marginRight: Platform.OS === 'ios' ? 10 : 16, paddingVertical: 5 },
   saveButtonDisabled: { color: '#B0B0B0', },
   friendSelector: { flexDirection: 'row', alignItems: 'center', marginBottom: 25, paddingVertical: 10, paddingHorizontal: 15, backgroundColor: '#fff', borderRadius: 10, },
   withUserText: { fontSize: 16, color: '#555', marginRight: 8, },
@@ -325,6 +397,7 @@ const styles = StyleSheet.create({
   inputAmount: { flex: 1, height: 70,  fontSize: 36,  fontWeight: '300', color: '#333', },
   splitTypeButton: { backgroundColor: '#fff', borderRadius: 10, paddingVertical: 18, paddingHorizontal: 15, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, },
   splitTypeButtonText: { fontSize: 16, color: '#333', flexShrink: 1, marginRight: 5 },
+  disabledSplitButton: { opacity: 0.5 }, // Estilo para o botão desativado
   bottomControls: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 20, paddingVertical: 10, backgroundColor: '#fff', borderRadius: 10, },
   controlButton: { flexDirection: 'row', alignItems: 'center', padding: 10, },
   controlIcon: { marginRight: 6, },
@@ -333,4 +406,43 @@ const styles = StyleSheet.create({
   container: {  flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20, },
   infoText: { fontSize: 18, textAlign: 'center', marginBottom: 10},
   infoSubText: { fontSize: 14, textAlign: 'center', color: 'gray'},
+});
+
+
+const stylesT = StyleSheet.create({
+  screenContainer: {
+    flex: 1,
+    backgroundColor: '#F4F6F8',
+  },
+  content: { // Estilo para o conteúdo de teste
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  infoText: {
+    fontSize: 18,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  testInput: {
+    height: 40,
+    borderColor: 'gray',
+    borderWidth: 1,
+    marginBottom: 10,
+    paddingHorizontal: 10,
+    width: '80%',
+  },
+  headerButton: {
+    paddingHorizontal: Platform.OS === 'ios' ? 10 : 16,
+    paddingVertical: 5,
+  },
+  saveButtonText: {
+    color: Platform.OS === 'ios' ? '#007AFF' : '#000000',
+    fontSize: 17,
+    fontWeight: Platform.OS === 'ios' ? '600' : '500',
+  },
+  saveButtonDisabledText: {
+    color: Platform.OS === 'ios' ? '#BDBDBD' : '#9E9E9E',
+  },
 });

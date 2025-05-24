@@ -32,10 +32,10 @@ import { SELECTED_EXPENSE_DATE_KEY } from '../select-date';
 const ASYNC_STORAGE_SELECTED_SPLIT_OPTION_KEY = "selected_split_option";
 
 const formatDateForDisplay = (dateString: string): string => {
-  const date = new Date(dateString);
-  // Adiciona um dia para corrigir potenciais problemas de fuso horário que fazem a data parecer um dia antes
-  const adjustedDate = new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
-  return `${adjustedDate.toLocaleDateString('pt-PT', { day: 'numeric' })} de ${adjustedDate.toLocaleDateString('pt-PT', { month: 'short' }).replace('.','')}`;
+    const date = new Date(dateString);
+    // Adiciona um dia para corrigir potenciais problemas de fuso horário que fazem a data parecer um dia antes
+    const adjustedDate = new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+    return `${adjustedDate.toLocaleDateString('pt-PT', { day: 'numeric' })} de ${adjustedDate.toLocaleDateString('pt-PT', { month: 'short' }).replace('.','')}`;
 };
 
 export default function AddExpenseScreen() {
@@ -444,7 +444,7 @@ export default function AddExpenseScreen() {
             </View>
         );
     }
-    
+
     if (params.friendId && !selectedFriend) {
         return (
             <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -556,7 +556,10 @@ export default function AddExpenseScreen() {
                                 <Text style={styles.controlButtonText}>Sem grupo</Text>
                             </TouchableOpacity> */}
                         </View>
-                        <TouchableOpacity style={styles.controlButton}>
+                        <TouchableOpacity 
+                            style={styles.controlButton}
+                            onPress={() => Alert.alert("Sem grupo", "Funcionalidade ainda não implementada.")}
+                        >
                             <Ionicons name="people-outline" size={20} color="#555" style={styles.controlIcon} />
                             <Text>Sem grupo</Text>
                         </TouchableOpacity>

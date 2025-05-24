@@ -85,7 +85,7 @@ export default function TabLayout() {
               } else if (currentFolderName === '(tabs)' && currentScreenName ==='groups') {
                 // Estamos no ecrã de grupos
                 console.log('A navegar para criar grupo...');
-                router.push('/groups'); // Crie esta rota app/create-group.tsx
+                router.push('/add-expense'); // Crie esta rota app/create-group.tsx
               } else { // Inclui o caso de estar em 'index' (Amigos) ou outro ecrã de tab
                 // Comportamento padrão: Navega para adicionar despesa sem amigo pré-selecionado
                 console.log('A navegar para adicionar despesa genérica...');

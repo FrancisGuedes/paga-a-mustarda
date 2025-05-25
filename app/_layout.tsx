@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from '../context/AuthContext';
 import { FriendProvider } from '../context/FriendContext';
 import { ActivityIndicator, View, StyleSheet, LogBox } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 // Ignorar avisos comuns (opcional, mas útil durante o desenvolvimento)
 LogBox.ignoreLogs([
@@ -85,13 +86,15 @@ function ProtectedNavigation() {
 
 export default function RootLayout() {
   return (
-    <SafeAreaProvider> 
-      <AuthProvider>
-        <FriendProvider>
-          <ProtectedNavigation />
-        </FriendProvider>
-      </AuthProvider>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider> 
+        <AuthProvider>
+          <FriendProvider>
+            <ProtectedNavigation />
+          </FriendProvider>
+        </AuthProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
 

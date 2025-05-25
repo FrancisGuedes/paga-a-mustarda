@@ -28,7 +28,15 @@ import { supabase } from "../../../config/supabase";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "../../../context/AuthContext";
 import { useCurrentFriend } from "../../../context/FriendContext";
-import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
+import Swipeable, { SwipeableMethods } from "react-native-gesture-handler/ReanimatedSwipeable";
+import SwipeDirection from "react-native-gesture-handler/ReanimatedSwipeable";
+import Reanimated, {
+    useAnimatedStyle,
+    interpolate,
+    SharedValue, // Para tipar os parâmetros se necessário
+    runOnJS,
+    Extrapolation
+} from 'react-native-reanimated';
 
 // Interface para Despesa
 export interface Expense {
@@ -51,6 +59,72 @@ interface GroupedExpenses {
 }
 
 const EXPENSES_STORAGE_KEY_PREFIX = "paga_a_mostarda_expenses_cache_v3_";
+const DELETE_BUTTON_WIDTH = 80; // Largura do botão de eliminar
+//const FULL_SWIPE_DELETE_THRESHOLD = 300; // Largura mínima para considerar um swipe completo para eliminar
+
+// Componente para a ação de swipe parcial e full
+// const SwipeableDeleteAction_ZZZ = ({ dragX, onPress, itemHeight }: { dragX: SharedValue<number>, onPress: () => void, itemHeight: number }) => {
+//     const animatedStyle = useAnimatedStyle(() => {
+//         // O botão deve expandir-se à medida que se arrasta para além da sua largura inicial
+//         const actualDragX = Math.abs(dragX.value);
+//         const clampedDragX = Math.min(actualDragX, FULL_SWIPE_DELETE_THRESHOLD + 20); // Limita a expansão
+
+//         const currentWidth = interpolate(
+//             clampedDragX,
+//             [0, DELETE_BUTTON_WIDTH, FULL_SWIPE_DELETE_THRESHOLD],
+//             [DELETE_BUTTON_WIDTH, DELETE_BUTTON_WIDTH, clampedDragX], // Começa com DELETE_BUTTON_WIDTH e expande
+//             Extrapolation.CLAMP
+//         );
+
+//         const translateX = interpolate(
+//             dragX.value,
+//             [- (FULL_SWIPE_DELETE_THRESHOLD + 20), -DELETE_BUTTON_WIDTH, 0],
+//             [0, 0, DELETE_BUTTON_WIDTH + 20], // Ajusta para que o botão "siga" o dedo   
+//             { extrapolateLeft: Extrapolation.CLAMP, extrapolateRight: Extrapolation.CLAMP }
+//         );
+//         return {
+//             width: currentWidth, // Largura dinâmica
+//             transform: [{ translateX: translateX }],
+//             height: itemHeight,
+//         };
+//     });
+
+//     return (
+//         <TouchableOpacity onPress={onPress} style={[styles.deleteButtonTouchable, { height: itemHeight, width: 'auto' /* Para permitir que a Reanimated.View controle a largura */ }]}>
+//             <Reanimated.View style={[styles.deleteButtonView, animatedStyle]}>
+//                 <Ionicons name="trash-outline" size={28} color="white" />
+//             </Reanimated.View>
+//         </TouchableOpacity>
+//     );
+// };
+
+// Componente para a ação de swipe parcial
+const SwipeableDeleteAction = ({ dragX, onPress, itemHeight }: { 
+    dragX: SharedValue<number>, 
+    onPress: () => void, 
+    itemHeight: number 
+}) => {
+    const animatedStyle = useAnimatedStyle(() => {
+        const translateX = interpolate(
+            dragX.value,
+            [-DELETE_BUTTON_WIDTH, 0],
+            [0, DELETE_BUTTON_WIDTH],
+            { extrapolateLeft: Extrapolation.CLAMP, extrapolateRight: Extrapolation.CLAMP }
+        );
+        return {
+            transform: [{ translateX: translateX }],
+            height: itemHeight,
+        };
+    });
+
+    return (
+        <TouchableOpacity onPress={onPress} style={[styles.deleteButtonTouchable, { height: itemHeight }]}>
+            <Reanimated.View style={[styles.deleteButtonView, animatedStyle]}>
+                <Ionicons name="trash-outline" size={28} color="white" />
+            </Reanimated.View>
+        </TouchableOpacity>
+    );
+};
 
 export default function FriendExpensesScreen() {
     const {
@@ -71,6 +145,8 @@ export default function FriendExpensesScreen() {
     const insets = useSafeAreaInsets();
     const router = useRouter();
     const navigation = useNavigation();
+    const swipeableRefs = useRef<{ [key: string]: SwipeableMethods | null }>({});
+    const [itemHeights, setItemHeights] = useState<{ [key: string]: number }>({});
 
     // O nome do amigo é passado como parâmetro de query na navegação
     const friendName = name ? decodeURIComponent(name) : `Amigo ${routeFriendId}`;
@@ -204,12 +280,12 @@ export default function FriendExpensesScreen() {
             }
 
             /* if (auth.user && !auth.isLoading && routeFriendId) {
-                      loadExpenses({ forceNetwork: expenses.length === 0 });
-                  } else if (!auth.isLoading && !auth.user) {
-                      setExpenses([]);
-                      const storageKey = getExpensesStorageKey();
-                      if(storageKey) AsyncStorage.removeItem(storageKey);
-                      setLoading(false);
+                    loadExpenses({ forceNetwork: expenses.length === 0 });
+                } else if (!auth.isLoading && !auth.user) {
+                    setExpenses([]);
+                    const storageKey = getExpensesStorageKey();
+                    if(storageKey) AsyncStorage.removeItem(storageKey);
+                    setLoading(false);
                   } */
 
             if (auth.user && !auth.isLoading && routeFriendId && isActive) {
@@ -247,6 +323,106 @@ export default function FriendExpensesScreen() {
             loadExpenses({ forceNetwork: true, isPullToRefresh: true });
         }
     }, [auth.user, auth.isLoading, routeFriendId, loadExpenses]);
+
+    const confirmAndDeleteExpense = (expenseId: string, userShareToReverse: number) => {
+        Alert.alert(
+            "Eliminar Despesa",
+            "Tem a certeza que quer eliminar esta despesa? Esta ação vai remover esta despesa para TODOS os utilizadores envolvidos e não apenas para si",
+            [
+                {
+                    text: "Cancelar",
+                    style: "cancel",
+                    onPress: () => swipeableRefs.current[expenseId]?.close()
+                },
+                {
+                    text: "Ok",
+                    style: "destructive",
+                    onPress: async () => {
+                        await performDelete(expenseId, userShareToReverse);
+                    }
+                }
+            ]
+        );
+    };
+
+    const performDelete = async (expenseId: string, userShareToReverse: number) => {
+        console.log("A eliminar despesa ID:", expenseId);
+        // Fechar o swipeable antes de eliminar, se ainda não estiver fechado
+        //swipeableRefs.current[expenseId]?.close();
+
+        const { error: deleteError } = await supabase
+            .from('expenses')
+            .delete()
+            .eq('id', expenseId);
+
+        if (deleteError) {
+            Alert.alert("Erro", "Não foi possível eliminar a despesa.");
+            console.error("Erro ao eliminar despesa:", deleteError);
+            return;
+        }
+
+        const expensesBeforeDelete = expenses;
+        setExpenses(prevExpenses => prevExpenses.filter(exp => exp.id !== expenseId));
+
+        const updatedExpenses = expenses.filter(exp => exp.id !== expenseId);
+        setExpenses(updatedExpenses);
+
+        try {
+            if (auth.user?.id && routeFriendId) {
+                const { data: friendData, error: friendFetchError } = await supabase.from('friends').select('balance').eq('user_id', auth.user.id).eq('id', routeFriendId).single();
+                if (friendFetchError && friendFetchError.code !== 'PGRST116') throw friendFetchError;
+                const currentFriendBalance = friendData?.balance || 0;
+                const newFriendBalance = currentFriendBalance - userShareToReverse;
+                await supabase.from('friends').update({ balance: newFriendBalance, updated_at: new Date().toISOString() }).eq('user_id', auth.user.id).eq('id', routeFriendId).throwOnError();
+                console.log("Saldo do amigo atualizado após eliminação para:", newFriendBalance);
+            }
+            const storageKey = getExpensesStorageKey();
+            if (storageKey) {
+                const updatedExpensesForCache = expensesBeforeDelete.filter(exp => exp.id !== expenseId);
+                await AsyncStorage.setItem(storageKey, JSON.stringify(updatedExpensesForCache));
+            }
+            console.log("Despesa eliminada e cache atualizado.");
+            // Alert.alert("Sucesso", "Despesa eliminada."); // Opcional, dependendo da UX desejada
+        } catch (e) {
+            console.error("Erro durante operações pós-eliminação (saldo/cache):", e);
+            // Reverter a UI se as operações pós-delete falharem? (Mais complexo)
+            Alert.alert("Aviso", "Despesa eliminada, mas ocorreu um erro ao atualizar o saldo ou cache.");
+        }
+        return true;
+    };
+
+    /* Para usar no full SWIPE TO DELETE */
+    /* const renderRightActions_ZZZ = (
+        progress: SharedValue<number>,
+        dragX: SharedValue<number>,
+        expense: Expense
+    ) => {
+        return (
+            <SwipeableDeleteAction
+                dragX={dragX}
+                itemHeight={itemHeights[expense.id] || styles.expenseItem.paddingVertical * 2 + 40}
+                onPress={() => {
+                    confirmAndDeleteExpense(expense.id, expense.user_share);
+                }}
+            />
+        );
+    }; */
+
+    const renderRightActions = (
+        progress: SharedValue<number>,
+        dragX: SharedValue<number>,
+        expense: Expense
+    ) => {
+        return (
+            <SwipeableDeleteAction
+                dragX={dragX}
+                itemHeight={itemHeights[expense.id] || styles.expenseItem.minHeight || 70}
+                onPress={() => {
+                    confirmAndDeleteExpense(expense.id, expense.user_share);
+                }}
+            />
+        );
+    };
 
     // Calcula o saldo com este amigo específico usando user_share
     const balanceWithFriend = expenses.reduce(
@@ -418,43 +594,76 @@ export default function FriendExpensesScreen() {
                                 expense.user_share > 0 ? "emprestou" : "emprestaram-lhe";
 
                             return (
-                                <View key={expense.id} style={styles.expenseItem}>
-                                    <View style={styles.expenseDateContainer}>
-                                        <Text style={styles.expenseDay}>{day}</Text>
-                                        <Text style={styles.expenseMonth}>{monthAbbrev}</Text>
-                                    </View>
-                                    <View style={styles.expenseIconContainer}>
-                                        <Ionicons
-                                            name={expense.category_icon || "receipt-outline"}
-                                            size={24}
-                                            color="#4F4F4F"
-                                        />
-                                    </View>
-                                    <View style={styles.expenseDetails}>
-                                        <Text
-                                            style={styles.expenseDescription}
-                                            numberOfLines={1}
-                                            ellipsizeMode="tail"
+                                
+                                    <Swipeable
+                                        key={expense.id}
+                                        ref={ref => { if (ref) swipeableRefs.current[expense.id] = ref; }}
+                                        renderRightActions={(progress, dragX) => 
+                                            renderRightActions(
+                                                progress as unknown as SharedValue<number>,
+                                                dragX as unknown as SharedValue<number>,
+                                                expense
+                                            )
+                                        }
+                                        // Removidas as props para o swipe completo para focar no botão
+                                        // rightThreshold={FULL_SWIPE_DELETE_THRESHOLD} 
+                                        // onSwipeableWillOpen={(direction: SwipeDirection) => {
+                                        //   if (direction === 'left') {
+                                        //     runOnJS(confirmAndDeleteExpense)(expense.id, expense.user_share);
+                                        //   }
+                                        // }}
+                                        renderLeftActions={() => null} // Não renderiza nada para ações da esquerda
+                                        overshootRight={false}
+                                        friction={1}
+                                        // leftThreshold define quão longe precisa arrastar para as RightActions ficarem abertas
+                                        leftThreshold={DELETE_BUTTON_WIDTH / 2} // Abrir o botão com um swipe menor
+                                    >
+                                        <View 
+                                            style={styles.expenseItem}
+                                            onLayout={(event) => { 
+                                            const { height } = event.nativeEvent.layout;
+                                                if (typeof height === 'number' && !isNaN(height)) {
+                                                    setItemHeights(prev => ({ ...prev, [expense.id]: height }));
+                                                }
+                                            }}
                                         >
-                                            {expense.description}
-                                        </Text>
-                                        <Text style={styles.paidByText}>
-                                            {expense.paid_by_user
-                                                ? `Pagou ${expense.total_amount.toFixed(2)} €`
-                                                : `${friendFirstName} pagou ${expense.total_amount.toFixed(
-                                                    2
-                                                )} €`}
-                                        </Text>
+                                            <View style={styles.expenseDateContainer}>
+                                                <Text style={styles.expenseDay}>{day}</Text>
+                                                <Text style={styles.expenseMonth}>{monthAbbrev}</Text>
+                                            </View>
+                                            <View style={styles.expenseIconContainer}>
+                                                <Ionicons
+                                                    name={expense.category_icon || "receipt-outline"}
+                                                    size={24}
+                                                    color="#4F4F4F"
+                                                />
+                                            </View>
+                                            <View style={styles.expenseDetails}>
+                                                <Text
+                                                    style={styles.expenseDescription}
+                                                    numberOfLines={1}
+                                                    ellipsizeMode="tail"
+                                                >
+                                                    {expense.description}
+                                                </Text>
+                                                <Text style={styles.paidByText}>
+                                                    {expense.paid_by_user
+                                                        ? `Pagou ${expense.total_amount.toFixed(2)} €`
+                                                        : `${friendFirstName} pagou ${expense.total_amount.toFixed(
+                                                            2
+                                                        )} €`}
+                                                </Text>
+                                            </View>
+                                            <View style={styles.expenseShareContainer}>
+                                                <Text style={[styles.expenseShareAmount, shareColor]}>
+                                                    {userShareAbs} €
+                                                </Text>
+                                                <Text style={[styles.expenseShareLabel, shareColor]}>
+                                                    {shareText}
+                                                </Text>
+                                            </View>
                                     </View>
-                                    <View style={styles.expenseShareContainer}>
-                                        <Text style={[styles.expenseShareAmount, shareColor]}>
-                                            {userShareAbs} €
-                                        </Text>
-                                        <Text style={[styles.expenseShareLabel, shareColor]}>
-                                            {shareText}
-                                        </Text>
-                                    </View>
-                                </View>
+                                </Swipeable>
                             );
                         })}
                     </View>
@@ -467,7 +676,7 @@ export default function FriendExpensesScreen() {
 const styles = StyleSheet.create({
     outerContainer: {
         flex: 1,
-        backgroundColor: "#F4F6F8", // Fundo geral do ecrã
+        backgroundColor: "#FFFFFF", // Fundo geral do ecrã
     },
     loadingContainer: {
         flex: 1,
@@ -571,16 +780,14 @@ const styles = StyleSheet.create({
         textTransform: "uppercase",
     },
     expenseItem: {
-        flexDirection: "row",
-        backgroundColor: "#fff",
-        paddingVertical: 12,
+        flexDirection: 'row',
+        backgroundColor: '#fff',
+        paddingVertical: 12, // Mantido para o cálculo da altura de fallback
         paddingHorizontal: 16,
-        marginHorizontal: 10, // Se quiser que os cards não toquem as bordas
-        marginBottom: 1, // Para criar um efeito de linhas separadoras finas
-        // Para um look de card, adicione borderRadius e um pequeno marginVertical
-        // borderRadius: 8,
-        // marginVertical: 5,
-        alignItems: "center",
+        marginHorizontal: 10,
+        marginBottom: 1,
+        alignItems: 'center',
+        minHeight: 70, // Altura mínima para consistência
     },
     expenseDateContainer: {
         alignItems: "center",
@@ -662,5 +869,17 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.3,
         shadowRadius: 4,
+    },
+    deleteButtonTouchable: {
+        backgroundColor: 'red',
+        justifyContent: 'center',
+        alignItems: 'center',
+        width: DELETE_BUTTON_WIDTH,
+    },
+    deleteButtonView: {
+        height: '100%',
+        width: DELETE_BUTTON_WIDTH,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
 });

@@ -29,12 +29,10 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "../../../context/AuthContext";
 import { useCurrentFriend } from "../../../context/FriendContext";
 import Swipeable, { SwipeableMethods } from "react-native-gesture-handler/ReanimatedSwipeable";
-import SwipeDirection from "react-native-gesture-handler/ReanimatedSwipeable";
 import Reanimated, {
     useAnimatedStyle,
     interpolate,
-    SharedValue, // Para tipar os parâmetros se necessário
-    runOnJS,
+    SharedValue,
     Extrapolation
 } from 'react-native-reanimated';
 
@@ -147,6 +145,7 @@ export default function FriendExpensesScreen() {
     const navigation = useNavigation();
     const swipeableRefs = useRef<{ [key: string]: SwipeableMethods | null }>({});
     const [itemHeights, setItemHeights] = useState<{ [key: string]: number }>({});
+    const currentlyOpenSwipeableId = useRef<string | null>(null);
 
     // O nome do amigo é passado como parâmetro de query na navegação
     const friendName = name ? decodeURIComponent(name) : `Amigo ${routeFriendId}`;
@@ -424,6 +423,39 @@ export default function FriendExpensesScreen() {
         );
     };
 
+    const handleSwipeableWillOpen = (expenseId: string) => {
+        // Fecha qualquer outro swipeable que esteja aberto
+        if (currentlyOpenSwipeableId.current && currentlyOpenSwipeableId.current !== expenseId) {
+            swipeableRefs.current[currentlyOpenSwipeableId.current]?.close();
+        }
+        // Não define o currentlyOpenSwipeableId.current aqui, pois onSwipeableOpen fará isso
+        // se o swipe for para a direção correta (esquerda, para revelar rightActions).
+    };
+
+    const handleSwipeableOpen = (expenseId: string, direction: 'left' | 'right') => {
+        // Chamado quando o swipeable assenta no estado aberto
+        if (direction === 'left') { // Ações da direita foram abertas
+        // Se já havia um aberto e não é este, o handleSwipeableWillOpen já o deve ter fechado.
+        // Apenas atualiza qual está aberto agora.
+            console.log(`Swipeable ${expenseId} aberto para a esquerda.`);
+            currentlyOpenSwipeableId.current = expenseId;
+        } else if (direction === 'right') { 
+        // Se abrir para a direita (não deveria acontecer com a config atual), fecha-o
+            swipeableRefs.current[expenseId]?.close();
+        if (currentlyOpenSwipeableId.current === expenseId) {
+            currentlyOpenSwipeableId.current = null;
+        }
+        }
+  };
+
+    const handleSwipeableClose = (expenseId: string) => {
+    // Chamado quando o swipeable é fechado (por programa ou pelo utilizador)
+        console.log(`Swipeable ${expenseId} fechado.`);
+        if (currentlyOpenSwipeableId.current === expenseId) {
+            currentlyOpenSwipeableId.current = null;
+        }
+    };
+
     // Calcula o saldo com este amigo específico usando user_share
     const balanceWithFriend = expenses.reduce(
         (acc, expense) => acc + expense.user_share,
@@ -605,15 +637,18 @@ export default function FriendExpensesScreen() {
                                                 expense
                                             )
                                         }
-                                        // Removidas as props para o swipe completo para focar no botão
+                                        // Removidas as props para o full swipe para focar no botão
                                         // rightThreshold={FULL_SWIPE_DELETE_THRESHOLD} 
                                         // onSwipeableWillOpen={(direction: SwipeDirection) => {
                                         //   if (direction === 'left') {
                                         //     runOnJS(confirmAndDeleteExpense)(expense.id, expense.user_share);
                                         //   }
                                         // }}
-                                        renderLeftActions={() => null} // Não renderiza nada para ações da esquerda
-                                        overshootRight={false}
+                                        onSwipeableWillOpen={() => handleSwipeableWillOpen(expense.id)} // ATUALIZADO
+                                        onSwipeableOpen={(direction) => handleSwipeableOpen(expense.id, direction as 'left' | 'right')}
+                                        onSwipeableClose={() => handleSwipeableClose(expense.id)}
+                                        overshootLeft={false} // Impede overshoot para a esquerda (revelando left actions)
+                                        overshootRight={true} 
                                         friction={1}
                                         // leftThreshold define quão longe precisa arrastar para as RightActions ficarem abertas
                                         leftThreshold={DELETE_BUTTON_WIDTH / 2} // Abrir o botão com um swipe menor

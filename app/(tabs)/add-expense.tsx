@@ -257,6 +257,21 @@ export default function AddExpenseScreen() {
         }
     }, [selectedSplitOption, selectedFriend?.name, isLoadingSplitOption]);
 
+    const handleCustomBack = useCallback(() => {
+        // console.log("[handleBackRoute] Navegação atual:", JSON.stringify(navigation.getState(), null, 2));
+        // console.log("[handleCustomBack] Opções de navegação", segments);
+        // console.log("[handleCustomBack] handleCustomBack - Params atuais:", params);
+        if (params.friendId && params.friendName) {
+            console.log(`[handleCustomBack] Tentando voltar para o ecrã do amigo: /friend/${params.friendId}`);
+            // Usar replace pode ser mais robusto para garantir que a pilha de tabs é restaurada corretamente.
+            // Ou router.navigate para tentar manter a pilha se AddExpenseScreen for um modal sobre as tabs.
+            router.replace({ pathname: `/(tabs)/friend/[friendId]`, params: { friendId: params.friendId, name: params.friendName } });
+        } else {
+            console.log("[handleCustomBack] Não pode voltar, a usar replace para a raiz das tabs.");
+            router.replace('/(tabs)'); // Fallback para a rota inicial das tabs (Amigos)
+        }
+    }, [router, params.friendId, params.friendName]);
+
     const handleSaveExpense = useCallback(async () => {
         // ... (lógica de handleSaveExpense) ...
         if (
@@ -352,8 +367,12 @@ export default function AddExpenseScreen() {
             setAmount("");
             setExpenseDate(new Date().toISOString().split('T')[0]); // Reset date
             Alert.alert("Sucesso", "Despesa adicionada!");
-            if (router.canGoBack()) router.back();
-            else router.replace("/(tabs)");
+            if (router.canGoBack() && params.friendId && params.friendName) {
+                router.replace({ 
+                    pathname: "/(tabs)/friend/[friendId]", 
+                    params: { friendId: params.friendId, name: params.friendName } 
+                });
+            } else router.replace("/(tabs)");
         } catch (error: any) {
             console.error("Erro ao guardar despesa:", error);
             Alert.alert("Erro", `Guardar falhou: ${error.message}`);
@@ -388,7 +407,7 @@ export default function AddExpenseScreen() {
             headerLeft: () =>
                 Platform.OS === "ios" ? (
                     <TouchableOpacity
-                        onPress={() => router.back()}
+                        onPress={handleCustomBack}
                         style={styles.headerButton}
                     >
                         <Ionicons name="close" size={28} color="#000" />

@@ -58,10 +58,10 @@ export default function AddExpenseScreen() {
     } | null>(null);
     const [selectedSplitOption, setSelectedSplitOption] =
         useState<SplitTypeOption | null>(null);
-    const [isLoadingSplitOption, setIsLoadingSplitOption] = useState(false); // Inicia como false
+    const [isLoadingSplitOption, setIsLoadingSplitOption] = useState(false);
     const [displaySplitText, setDisplaySplitText] = useState(
         "Selecione como foi pago"
-    ); // Default inicial
+    );
     const [isSaving, setIsSaving] = useState(false);
     // Novo estado para a data da despesa, inicializado com a data atual no formato YYYY-MM-DD
     const [expenseDate, setExpenseDate] = useState<string>(new Date().toISOString().split('T')[0]);
@@ -130,6 +130,7 @@ export default function AddExpenseScreen() {
                     "[loadSplitOption] Opção carregada do AsyncStorage:",
                     optionToSet?.description_template
                 );
+                await AsyncStorage.removeItem(ASYNC_STORAGE_SELECTED_SPLIT_OPTION_KEY);
             } else {
                 console.log(
                     "[loadSplitOption] Nenhuma opção no cache, buscando default (sort_order = 1) do Supabase..."
@@ -148,9 +149,7 @@ export default function AddExpenseScreen() {
                         optionToSet?.description_template
                     );
                 } else {
-                    console.log(
-                        "[loadSplitOption] Nenhuma opção default (sort_order=1) encontrada no Supabase."
-                    );
+                    console.log("[loadSplitOption] Nenhuma opção default (sort_order=1) encontrada no Supabase.");
                 }
             }
         } catch (error: any) {
@@ -176,7 +175,7 @@ export default function AddExpenseScreen() {
                     setExpenseDate(storedDate);
                     // Opcional: Limpar após ler para que não afete a próxima vez que o ecrã for aberto,
                     // a menos que o utilizador selecione novamente.
-                    // await AsyncStorage.removeItem(SELECTED_EXPENSE_DATE_KEY);
+                    await AsyncStorage.removeItem(SELECTED_EXPENSE_DATE_KEY);
                 } else {
                     console.log("[AddExpenseScreen] Nenhuma data selecionada no AsyncStorage.");
                     // Mantém a data atual se nada for encontrado (já definido no useState inicial)
@@ -345,14 +344,14 @@ export default function AddExpenseScreen() {
                     .throwOnError();
                 console.log("[AddExpense] Balanço do amigo atualizado:", updateBalance);
             }
-            Alert.alert("Sucesso", "Despesa adicionada!");
+            
             await AsyncStorage.removeItem(ASYNC_STORAGE_SELECTED_SPLIT_OPTION_KEY);
             await AsyncStorage.removeItem(SELECTED_EXPENSE_DATE_KEY);
             setSelectedSplitOption(null);
             setDescription("");
             setAmount("");
             setExpenseDate(new Date().toISOString().split('T')[0]); // Reset date
-
+            Alert.alert("Sucesso", "Despesa adicionada!");
             if (router.canGoBack()) router.back();
             else router.replace("/(tabs)");
         } catch (error: any) {

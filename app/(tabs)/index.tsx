@@ -35,6 +35,26 @@ interface Friend {
 
 const FRIENDS_STORAGE_KEY_PREFIX = 'paga_a_mostarda_friends_cache_';
 
+// --- Componentes Skeleton ---
+const SkeletonPlaceholder = ({ width, height, style, circle = false }: { width: number | string; height: number; style?: object, circle?: boolean }) => (
+  <View style={[{ width, height, backgroundColor: '#E0E0E0', borderRadius: circle ? height / 2 : 4 }, style]} />
+);
+
+const SkeletonFriendItem = () => (
+  <View style={styles.friendItemContainer}>
+    <SkeletonPlaceholder width={48} height={48} circle={true} style={styles.avatarSkeleton} />
+    <View style={styles.friendInfo}>
+      <SkeletonPlaceholder width={'70%'} height={18} style={{ marginBottom: 6 }} />
+      {/* <SkeletonPlaceholder width={'40%'} height={14} /> // Opcional: para subtexto se houver */}
+    </View>
+    <View style={styles.friendBalance}>
+      <SkeletonPlaceholder width={60} height={16} style={{ marginBottom: 4 }} />
+      <SkeletonPlaceholder width={80} height={12} />
+    </View>
+  </View>
+);
+// --- Fim Componentes Skeleton ---
+
 /**
  * Friends list screen with pending balances.
  * Displays a summary at the top with the total balance and allows adding new friends.
@@ -265,12 +285,35 @@ export default function FriendsScreen() {
   }
 
   // If there's a user but friends are still loading
-  if (initialLoading && friends.length === 0) {
+  /* if (initialLoading && friends.length === 0) {
     return (
         <View style={[styles.loadingContainer, { paddingTop: insets.top }]}>
             <ActivityIndicator size="large" color="#007AFF" />
             <Text>A carregar amigos...</Text>
         </View>
+    );
+  } */
+ if (initialLoading && friends.length === 0 && !isRefreshing) {
+    return (
+      <View style={{ flex: 1, paddingTop: insets.top, backgroundColor: styles.screenContainer.backgroundColor }}>
+        {/* Cabeçalho Personalizado (visível durante o skeleton) */}
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.headerIcon}><Ionicons name="search-outline" size={26} color="#333" /></TouchableOpacity>
+          <Link href="/add-friend" style={styles.addFriendsLinkStyle}><Text style={styles.addFriendsButtonText}>Adicionar amigos</Text></Link>
+        </View>
+        {/* Resumo do Saldo (visível durante o skeleton, com placeholder para o texto) */}
+        <View style={styles.summaryContainer}>
+          <SkeletonPlaceholder width={'70%'} height={20} />
+          <TouchableOpacity style={styles.filterIcon}><MaterialCommunityIcons name="filter-variant" size={24} color="#555" /></TouchableOpacity>
+        </View>
+        {/* Lista de Skeleton Items */}
+        <ScrollView style={styles.scrollViewStyle} contentContainerStyle={styles.scrollContentContainer}>
+            <SkeletonFriendItem />
+            <SkeletonFriendItem />
+            <SkeletonFriendItem />
+            <SkeletonFriendItem />
+        </ScrollView>
+      </View>
     );
   }
 
@@ -508,5 +551,8 @@ const styles = StyleSheet.create({
     marginLeft: 10,
     fontSize: 14,
     color: '#555',
+  },
+  avatarSkeleton: { // Estilo específico para o avatar no skeleton
+    marginRight: 16,
   },
 });

@@ -60,6 +60,7 @@ const EXPENSES_STORAGE_KEY_PREFIX = "paga_a_mostarda_expenses_cache_v3_";
 const DELETE_BUTTON_WIDTH = 80; // Largura do botão de eliminar
 //const FULL_SWIPE_DELETE_THRESHOLD = 300; // Largura mínima para considerar um swipe completo para eliminar
 const DEFAULT_FRIEND_AVATAR = 'https://ui-avatars.com/api/?background=0D8ABC&color=fff&size=100&rounded=true&name=';
+const DEFAULT_SKELETON_COUNT = 3;
 
 // Componente para a ação de swipe parcial e full
 // const SwipeableDeleteAction_ZZZ = ({ dragX, onPress, itemHeight }: { dragX: SharedValue<number>, onPress: () => void, itemHeight: number }) => {
@@ -150,14 +151,16 @@ const SkeletonExpenseItem = () => (
     </View>
 );
 
-const SkeletonMonthSection = ({ monthYearPlaceholder }: { monthYearPlaceholder: string }) => (
+const SkeletonMonthSection = ({ monthYearPlaceholder, skeletonItemCount }: 
+    { monthYearPlaceholder: string, skeletonItemCount: number }
+) => (
     <View style={styles.monthSection}>
         <Text style={[styles.monthYearText, styles.skeletonMonthYearText]}>
             {monthYearPlaceholder}
         </Text>
-        <SkeletonExpenseItem />
-        <SkeletonExpenseItem />
-        <SkeletonExpenseItem />
+        {Array.from({ length: skeletonItemCount }).map((_, index) => (
+            <SkeletonExpenseItem key={`skeleton-exp-${index}`} />
+        ))}
     </View>
 );
 // --- Fim Componentes Skeleton ---
@@ -190,6 +193,7 @@ export default function FriendExpensesScreen() {
     const friendName = name ? decodeURIComponent(name) : `Amigo ${routeFriendId}`;
     const friendFirstName = friendName.split(" ")[0];
     const friendAvatar = routeFriendAvatarUrl || `${DEFAULT_FRIEND_AVATAR}${friendFirstName.substring(0, 1)}`;
+    const [skeletonItemCount, setSkeletonItemCount] = useState(DEFAULT_SKELETON_COUNT); 
 
     console.log(`Despesas com ${friendName}:`, expenses);
 
@@ -237,71 +241,72 @@ export default function FriendExpensesScreen() {
         }
     };
 
-    const loadExpenses = useCallback(
-        async (
-            options: { forceNetwork?: boolean; isPullToRefresh?: boolean } = {}
-        ) => {
-            const { forceNetwork = false, isPullToRefresh = false } = options;
-            const storageKey = getExpensesStorageKey();
+    const loadExpenses = useCallback(async (
+        options: { forceNetwork?: boolean; isPullToRefresh?: boolean, showSkeleton?: boolean } = {}
+    ) => {
+        const { forceNetwork = false, isPullToRefresh = false, showSkeleton = false } = options;
+        const storageKey = getExpensesStorageKey();
 
-            if (!auth.user?.id || !routeFriendId) {
-                setExpenses([]);
-                setLoading(false);
-                setIsRefreshing(false);
-                return;
-            }
-            const currentUserId = auth.user.id;
+        if (!auth.user?.id || !routeFriendId) {
+            setExpenses([]);
+            setLoading(false);
+            setIsRefreshing(false);
+            return;
+        }
+        const currentUserId = auth.user.id;
 
-            if (isPullToRefresh) setIsRefreshing(true);
-            else if (expenses.length === 0 || forceNetwork) setLoading(true);
-            setError(null);
+        if (isPullToRefresh) setIsRefreshing(true);
+        else if (showSkeleton || expenses.length === 0 || forceNetwork) {
+            setLoading(true);
+            setExpenses([]);
+        }
+        setError(null);
 
-            if (!forceNetwork && !isPullToRefresh && storageKey) {
-                try {
-                    const cachedExpensesJson = await AsyncStorage.getItem(storageKey);
-                    if (cachedExpensesJson) {
-                        const cachedExpenses = JSON.parse(cachedExpensesJson) as Expense[];
-                        if (cachedExpenses.length > 0) {
-                            setExpenses(cachedExpenses);
-                            if (!isPullToRefresh) setLoading(false);
-                        }
-                    }
-                } catch (e) {
-                    console.error("[loadExpenses] Erro ao ler cache:", e);
-                }
-            } else if (forceNetwork && !isPullToRefresh) {
-                setExpenses([]);
-            }
-
+        if (!forceNetwork && !isPullToRefresh && !showSkeleton && storageKey) {
             try {
-                const dataFromSupabase = await fetchExpensesFromSupabase(
-                    currentUserId,
-                    routeFriendId
-                );
-                setExpenses(dataFromSupabase);
-                if (storageKey) {
-                    try {
-                        await AsyncStorage.setItem(
-                            storageKey,
-                            JSON.stringify(dataFromSupabase)
-                        );
-                    } catch (e) {
-                        console.error("[loadExpenses] Erro ao guardar no cache:", e);
+                const cachedExpensesJson = await AsyncStorage.getItem(storageKey);
+                if (cachedExpensesJson) {
+                    const cachedExpenses = JSON.parse(cachedExpensesJson) as Expense[];
+                    if (cachedExpenses.length > 0) {
+                        setExpenses(cachedExpenses);
+                        setSkeletonItemCount(cachedExpenses.length > 1 ? cachedExpenses.length : DEFAULT_SKELETON_COUNT); 
+                        console.log("[cachedExpenses] Skeleton item count atualizado:", skeletonItemCount);
                     }
                 }
-            } catch (e: any) {
-                const errorMessage = e.message || "Falha ao carregar despesas.";
-                setError(errorMessage);
-                if (expenses.length === 0 || isPullToRefresh)
-                    Alert.alert("Erro", errorMessage);
-                else console.warn("Falha ao atualizar, a usar cache:", errorMessage);
-            } finally {
-                setLoading(false);
-                setIsRefreshing(false);
+            } catch (e) {
+                console.error("[loadExpenses] Erro ao ler cache:", e);
             }
-        },
-        [auth.user, routeFriendId, getExpensesStorageKey, expenses.length]
-    );
+        } else if (forceNetwork && !isPullToRefresh && !showSkeleton) {
+            setExpenses([]);
+        }
+
+        try {
+            const dataFromSupabase = await fetchExpensesFromSupabase(currentUserId, routeFriendId);
+            setExpenses(dataFromSupabase);
+            //setSkeletonItemCount(dataFromSupabase.length > 1 ? dataFromSupabase.length : DEFAULT_SKELETON_COUNT); 
+            if (storageKey) {
+                try {
+                    await AsyncStorage.setItem(
+                        storageKey,
+                        JSON.stringify(dataFromSupabase)
+                    );
+                } catch (e) {
+                    console.error("[loadExpenses] Erro ao guardar no cache:", e);
+                }
+            }
+        } catch (e: any) {
+            const errorMessage = e.message || "Falha ao carregar despesas.";
+            setError(errorMessage);
+            if (expenses.length === 0 || isPullToRefresh || showSkeleton)
+                Alert.alert("Erro", errorMessage);
+            else console.warn("Falha ao atualizar, a usar cache:", errorMessage);
+        } finally {
+            setLoading(false);
+            setIsRefreshing(false);
+            console.log("[loadExpenses finally] Skeleton item count atualizado:", skeletonItemCount);
+        }
+    }, [auth.user, routeFriendId, getExpensesStorageKey, expenses.length]
+);
 
     useFocusEffect(
         useCallback(() => {
@@ -377,17 +382,22 @@ export default function FriendExpensesScreen() {
                     text: "Ok",
                     style: "destructive",
                     onPress: async () => {
-                        await performDelete(expenseId, userShareToReverse);
+                        await performDeleteAndReload(expenseId, userShareToReverse);
                     }
                 }
             ]
         );
     };
 
-    const performDelete = async (expenseId: string, userShareToReverse: number) => {
+    const performDeleteAndReload = async (expenseId: string, userShareToReverse: number) => {
+        setIsDeleting(true);
+        swipeableRefs.current[expenseId]?.close();
+
         console.log("A eliminar despesa ID:", expenseId);
         // Fechar o swipeable antes de eliminar, se ainda não estiver fechado
-        //swipeableRefs.current[expenseId]?.close();
+        swipeableRefs.current[expenseId]?.close();
+
+        setSkeletonItemCount(expenses.length > 1 ? expenses.length : DEFAULT_SKELETON_COUNT); 
 
         const { error: deleteError } = await supabase
             .from('expenses')
@@ -397,6 +407,7 @@ export default function FriendExpensesScreen() {
         if (deleteError) {
             Alert.alert("Erro", "Não foi possível eliminar a despesa.");
             console.error("Erro ao eliminar despesa:", deleteError);
+            setIsDeleting(false);
             return;
         }
 
@@ -412,7 +423,11 @@ export default function FriendExpensesScreen() {
                 if (friendFetchError && friendFetchError.code !== 'PGRST116') throw friendFetchError;
                 const currentFriendBalance = friendData?.balance || 0;
                 const newFriendBalance = currentFriendBalance - userShareToReverse;
-                await supabase.from('friends').update({ balance: newFriendBalance, updated_at: new Date().toISOString() }).eq('user_id', auth.user.id).eq('id', routeFriendId).throwOnError();
+                await supabase
+                    .from('friends')
+                    .update({ balance: newFriendBalance, updated_at: new Date().toISOString() })
+                    .eq('user_id', auth.user.id).eq('id', routeFriendId)
+                    .throwOnError();
                 console.log("Saldo do amigo atualizado após eliminação para:", newFriendBalance);
             }
             const storageKey = getExpensesStorageKey();
@@ -421,11 +436,15 @@ export default function FriendExpensesScreen() {
                 await AsyncStorage.setItem(storageKey, JSON.stringify(updatedExpensesForCache));
             }
             console.log("Despesa eliminada e cache atualizado.");
-            // Alert.alert("Sucesso", "Despesa eliminada."); // Opcional, dependendo da UX desejada
+            await loadExpenses({ forceNetwork: true, showSkeleton: true }); 
         } catch (e) {
             console.error("Erro durante operações pós-eliminação (saldo/cache):", e);
             // Reverter a UI se as operações pós-delete falharem? (Mais complexo)
             Alert.alert("Aviso", "Despesa eliminada, mas ocorreu um erro ao atualizar o saldo ou cache.");
+            await loadExpenses({ forceNetwork: true });
+        } finally {
+            setIsDeleting(false);
+            console.log("[performDeleteAndReload finally] Skeleton item count atualizado:", skeletonItemCount);
         }
         return true;
     };
@@ -563,7 +582,7 @@ export default function FriendExpensesScreen() {
         );
     }
 
-    if (loading && expenses.length === 0 && !isRefreshing) {
+    if ((loading || isDeleting) && !isRefreshing) {
         return (
             <View style={[styles.outerContainer, { paddingTop: insets.top }]}>
                 <Stack.Screen options={{ title: friendName, headerStyle: { backgroundColor: '#4A90E2' }, headerTintColor: '#fff' }} />
@@ -593,16 +612,11 @@ export default function FriendExpensesScreen() {
                 </View>
 
                 <ScrollView style={styles.scrollViewStyle} contentContainerStyle={styles.scrollContentContainer}>
-                    <SkeletonMonthSection monthYearPlaceholder="" />
-                    <SkeletonMonthSection monthYearPlaceholder="" />
+                    <SkeletonMonthSection 
+                        monthYearPlaceholder="" 
+                        skeletonItemCount={skeletonItemCount} 
+                    />
                 </ScrollView>
-                {isDeleting &&
-                    (
-                        <View style={styles.loadingOverlay}><ActivityIndicator size="large" color="#FFFFFF" />
-                            <Text style={styles.loadingText}>A eliminar...</Text>
-                        </View>
-                    )
-                }
             </View>
         );
     }
@@ -780,15 +794,6 @@ export default function FriendExpensesScreen() {
                     </View>
                 ))}
             </ScrollView>
-            {isDeleting && (
-                <View style={styles.loadingOverlay}>
-                    {/* <BlurView intensity={Platform.OS === 'ios' ? 20 : 80} tint="light" style={StyleSheet.absoluteFill} /> */}
-                    <View style={styles.actualLoadingBox}>
-                        <ActivityIndicator size="large" color="#FFFFFF" />
-                        <Text style={styles.loadingText}>A eliminar...</Text>
-                    </View>
-                </View>
-            )}
         </View>
     );
 }

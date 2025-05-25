@@ -145,7 +145,7 @@ export default function FriendsScreen() {
           const cachedFriends = JSON.parse(cachedFriendsJson) as Friend[];
           //console.log("[loadFriends] Amigos carregados do cache:", cachedFriends.length);
           setFriends(cachedFriends);
-          setInitialLoading(false);
+          //setInitialLoading(false);
         }
       } catch (e) {
         console.error("[loadFriends] Erro ao ler amigos do cache:", e);

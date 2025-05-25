@@ -59,6 +59,7 @@ interface GroupedExpenses {
 const EXPENSES_STORAGE_KEY_PREFIX = "paga_a_mostarda_expenses_cache_v3_";
 const DELETE_BUTTON_WIDTH = 80; // Largura do botão de eliminar
 //const FULL_SWIPE_DELETE_THRESHOLD = 300; // Largura mínima para considerar um swipe completo para eliminar
+const DEFAULT_FRIEND_AVATAR = 'https://ui-avatars.com/api/?background=0D8ABC&color=fff&size=100&rounded=true&name=';
 
 // Componente para a ação de swipe parcial e full
 // const SwipeableDeleteAction_ZZZ = ({ dragX, onPress, itemHeight }: { dragX: SharedValue<number>, onPress: () => void, itemHeight: number }) => {
@@ -97,10 +98,10 @@ const DELETE_BUTTON_WIDTH = 80; // Largura do botão de eliminar
 // };
 
 // Componente para a ação de swipe parcial
-const SwipeableDeleteAction = ({ dragX, onPress, itemHeight }: { 
-    dragX: SharedValue<number>, 
-    onPress: () => void, 
-    itemHeight: number 
+const SwipeableDeleteAction = ({ dragX, onPress, itemHeight }: {
+    dragX: SharedValue<number>,
+    onPress: () => void,
+    itemHeight: number
 }) => {
     const animatedStyle = useAnimatedStyle(() => {
         const translateX = interpolate(
@@ -124,6 +125,43 @@ const SwipeableDeleteAction = ({ dragX, onPress, itemHeight }: {
     );
 };
 
+// --- Componentes Skeleton ---
+const SkeletonPlaceholder = ({ width, height, style }: { width: number | string; height: number; style?: object }) => (
+    <View style={[{ width, height, backgroundColor: '#E0E0E0', borderRadius: 4 }, style]} />
+);
+
+const SkeletonExpenseItem = () => (
+    <View style={[styles.expenseItem, styles.skeletonItem]}>
+        <View style={styles.expenseDateContainer}>
+            <SkeletonPlaceholder width={25} height={18} style={{ marginBottom: 2 }} />
+            <SkeletonPlaceholder width={30} height={12} />
+        </View>
+        <View style={styles.expenseIconContainer}>
+            <SkeletonPlaceholder width={24} height={24} style={{ borderRadius: 12 }} />
+        </View>
+        <View style={styles.expenseDetails}>
+            <SkeletonPlaceholder width={'80%'} height={16} style={{ marginBottom: 4 }} />
+            <SkeletonPlaceholder width={'60%'} height={12} />
+        </View>
+        <View style={styles.expenseShareContainer}>
+            <SkeletonPlaceholder width={50} height={16} style={{ marginBottom: 4 }} />
+            <SkeletonPlaceholder width={70} height={12} />
+        </View>
+    </View>
+);
+
+const SkeletonMonthSection = ({ monthYearPlaceholder }: { monthYearPlaceholder: string }) => (
+    <View style={styles.monthSection}>
+        <Text style={[styles.monthYearText, styles.skeletonMonthYearText]}>
+            {monthYearPlaceholder}
+        </Text>
+        <SkeletonExpenseItem />
+        <SkeletonExpenseItem />
+        <SkeletonExpenseItem />
+    </View>
+);
+// --- Fim Componentes Skeleton ---
+
 export default function FriendExpensesScreen() {
     const {
         friendId: routeFriendId,
@@ -146,10 +184,12 @@ export default function FriendExpensesScreen() {
     const swipeableRefs = useRef<{ [key: string]: SwipeableMethods | null }>({});
     const [itemHeights, setItemHeights] = useState<{ [key: string]: number }>({});
     const currentlyOpenSwipeableId = useRef<string | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     // O nome do amigo é passado como parâmetro de query na navegação
     const friendName = name ? decodeURIComponent(name) : `Amigo ${routeFriendId}`;
     const friendFirstName = friendName.split(" ")[0];
+    const friendAvatar = routeFriendAvatarUrl || `${DEFAULT_FRIEND_AVATAR}${friendFirstName.substring(0, 1)}`;
 
     console.log(`Despesas com ${friendName}:`, expenses);
 
@@ -435,21 +475,21 @@ export default function FriendExpensesScreen() {
     const handleSwipeableOpen = (expenseId: string, direction: 'left' | 'right') => {
         // Chamado quando o swipeable assenta no estado aberto
         if (direction === 'left') { // Ações da direita foram abertas
-        // Se já havia um aberto e não é este, o handleSwipeableWillOpen já o deve ter fechado.
-        // Apenas atualiza qual está aberto agora.
+            // Se já havia um aberto e não é este, o handleSwipeableWillOpen já o deve ter fechado.
+            // Apenas atualiza qual está aberto agora.
             console.log(`Swipeable ${expenseId} aberto para a esquerda.`);
             currentlyOpenSwipeableId.current = expenseId;
-        } else if (direction === 'right') { 
-        // Se abrir para a direita (não deveria acontecer com a config atual), fecha-o
+        } else if (direction === 'right') {
+            // Se abrir para a direita (não deveria acontecer com a config atual), fecha-o
             swipeableRefs.current[expenseId]?.close();
-        if (currentlyOpenSwipeableId.current === expenseId) {
-            currentlyOpenSwipeableId.current = null;
+            if (currentlyOpenSwipeableId.current === expenseId) {
+                currentlyOpenSwipeableId.current = null;
+            }
         }
-        }
-  };
+    };
 
     const handleSwipeableClose = (expenseId: string) => {
-    // Chamado quando o swipeable é fechado (por programa ou pelo utilizador)
+        // Chamado quando o swipeable é fechado (por programa ou pelo utilizador)
         console.log(`Swipeable ${expenseId} fechado.`);
         if (currentlyOpenSwipeableId.current === expenseId) {
             currentlyOpenSwipeableId.current = null;
@@ -522,11 +562,47 @@ export default function FriendExpensesScreen() {
             </View>
         );
     }
-    if (loading && expenses.length === 0) {
+
+    if (loading && expenses.length === 0 && !isRefreshing) {
         return (
-            <View style={[styles.loadingContainer, { paddingTop: insets.top }]}>
-                <ActivityIndicator size="large" color="#007AFF" />
-                <Text>A carregar despesas com {friendName}...</Text>
+            <View style={[styles.outerContainer, { paddingTop: insets.top }]}>
+                <Stack.Screen options={{ title: friendName, headerStyle: { backgroundColor: '#4A90E2' }, headerTintColor: '#fff' }} />
+                {/* Cabeçalho e botões de ação podem ser mostrados mesmo durante o skeleton loading */}
+                <View style={styles.customHeader}>
+                    <View style={styles.headerContent}>
+                        {/* <Image source={{ uri: friendAvatar }} style={styles.headerAvatar} /> */}
+                        <Text style={styles.headerFriendName}>{friendName}</Text>
+                        <SkeletonPlaceholder width={120} height={18} style={{ backgroundColor: '#6DB5F2', marginTop: 4 }} />
+                    </View>
+                    <TouchableOpacity style={styles.settingsIcon}>
+                        <Feather name="settings" size={24} color="#fff" />
+                    </TouchableOpacity>
+                </View>
+
+                <View style={styles.actionButtonsContainer}>
+                    <TouchableOpacity style={[styles.actionButton, styles.liquidarButton]}>
+                        <Text style={[styles.actionButtonText, styles.liquidarButtonText]}>Liquidar contas</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.actionButton, styles.lembrarButton]}>
+                        <Text style={styles.actionButtonText}>Lembrar...</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.actionButton, styles.graficosButton]}>
+                        <Ionicons name="stats-chart-outline" size={18} color="#4A90E2" />
+                        <Text style={[styles.actionButtonText, { color: '#4A90E2', marginLeft: 5 }]}>Gráficos</Text>
+                    </TouchableOpacity>
+                </View>
+
+                <ScrollView style={styles.scrollViewStyle} contentContainerStyle={styles.scrollContentContainer}>
+                    <SkeletonMonthSection monthYearPlaceholder="" />
+                    <SkeletonMonthSection monthYearPlaceholder="" />
+                </ScrollView>
+                {isDeleting &&
+                    (
+                        <View style={styles.loadingOverlay}><ActivityIndicator size="large" color="#FFFFFF" />
+                            <Text style={styles.loadingText}>A eliminar...</Text>
+                        </View>
+                    )
+                }
             </View>
         );
     }
@@ -626,77 +702,77 @@ export default function FriendExpensesScreen() {
                                 expense.user_share > 0 ? "emprestou" : "emprestaram-lhe";
 
                             return (
-                                
-                                    <Swipeable
-                                        key={expense.id}
-                                        ref={ref => { if (ref) swipeableRefs.current[expense.id] = ref; }}
-                                        renderRightActions={(progress, dragX) => 
-                                            renderRightActions(
-                                                progress as unknown as SharedValue<number>,
-                                                dragX as unknown as SharedValue<number>,
-                                                expense
-                                            )
-                                        }
-                                        // Removidas as props para o full swipe para focar no botão
-                                        // rightThreshold={FULL_SWIPE_DELETE_THRESHOLD} 
-                                        // onSwipeableWillOpen={(direction: SwipeDirection) => {
-                                        //   if (direction === 'left') {
-                                        //     runOnJS(confirmAndDeleteExpense)(expense.id, expense.user_share);
-                                        //   }
-                                        // }}
-                                        onSwipeableWillOpen={() => handleSwipeableWillOpen(expense.id)} // ATUALIZADO
-                                        onSwipeableOpen={(direction) => handleSwipeableOpen(expense.id, direction as 'left' | 'right')}
-                                        onSwipeableClose={() => handleSwipeableClose(expense.id)}
-                                        overshootLeft={false} // Impede overshoot para a esquerda (revelando left actions)
-                                        overshootRight={true} 
-                                        friction={1}
-                                        // leftThreshold define quão longe precisa arrastar para as RightActions ficarem abertas
-                                        leftThreshold={DELETE_BUTTON_WIDTH / 2} // Abrir o botão com um swipe menor
-                                    >
-                                        <View 
-                                            style={styles.expenseItem}
-                                            onLayout={(event) => { 
+
+                                <Swipeable
+                                    key={expense.id}
+                                    ref={ref => { if (ref) swipeableRefs.current[expense.id] = ref; }}
+                                    renderRightActions={(progress, dragX) =>
+                                        renderRightActions(
+                                            progress as unknown as SharedValue<number>,
+                                            dragX as unknown as SharedValue<number>,
+                                            expense
+                                        )
+                                    }
+                                    // Removidas as props para o full swipe para focar no botão
+                                    // rightThreshold={FULL_SWIPE_DELETE_THRESHOLD} 
+                                    // onSwipeableWillOpen={(direction: SwipeDirection) => {
+                                    //   if (direction === 'left') {
+                                    //     runOnJS(confirmAndDeleteExpense)(expense.id, expense.user_share);
+                                    //   }
+                                    // }}
+                                    onSwipeableWillOpen={() => handleSwipeableWillOpen(expense.id)} // ATUALIZADO
+                                    onSwipeableOpen={(direction) => handleSwipeableOpen(expense.id, direction as 'left' | 'right')}
+                                    onSwipeableClose={() => handleSwipeableClose(expense.id)}
+                                    overshootLeft={false} // Impede overshoot para a esquerda (revelando left actions)
+                                    overshootRight={true}
+                                    friction={1}
+                                    // leftThreshold define quão longe precisa arrastar para as RightActions ficarem abertas
+                                    leftThreshold={DELETE_BUTTON_WIDTH / 2} // Abrir o botão com um swipe menor
+                                >
+                                    <View
+                                        style={styles.expenseItem}
+                                        onLayout={(event) => {
                                             const { height } = event.nativeEvent.layout;
-                                                if (typeof height === 'number' && !isNaN(height)) {
-                                                    setItemHeights(prev => ({ ...prev, [expense.id]: height }));
-                                                }
-                                            }}
-                                        >
-                                            <View style={styles.expenseDateContainer}>
-                                                <Text style={styles.expenseDay}>{day}</Text>
-                                                <Text style={styles.expenseMonth}>{monthAbbrev}</Text>
-                                            </View>
-                                            <View style={styles.expenseIconContainer}>
-                                                <Ionicons
-                                                    name={expense.category_icon || "receipt-outline"}
-                                                    size={24}
-                                                    color="#4F4F4F"
-                                                />
-                                            </View>
-                                            <View style={styles.expenseDetails}>
-                                                <Text
-                                                    style={styles.expenseDescription}
-                                                    numberOfLines={1}
-                                                    ellipsizeMode="tail"
-                                                >
-                                                    {expense.description}
-                                                </Text>
-                                                <Text style={styles.paidByText}>
-                                                    {expense.paid_by_user
-                                                        ? `Pagou ${expense.total_amount.toFixed(2)} €`
-                                                        : `${friendFirstName} pagou ${expense.total_amount.toFixed(
-                                                            2
-                                                        )} €`}
-                                                </Text>
-                                            </View>
-                                            <View style={styles.expenseShareContainer}>
-                                                <Text style={[styles.expenseShareAmount, shareColor]}>
-                                                    {userShareAbs} €
-                                                </Text>
-                                                <Text style={[styles.expenseShareLabel, shareColor]}>
-                                                    {shareText}
-                                                </Text>
-                                            </View>
+                                            if (typeof height === 'number' && !isNaN(height)) {
+                                                setItemHeights(prev => ({ ...prev, [expense.id]: height }));
+                                            }
+                                        }}
+                                    >
+                                        <View style={styles.expenseDateContainer}>
+                                            <Text style={styles.expenseDay}>{day}</Text>
+                                            <Text style={styles.expenseMonth}>{monthAbbrev}</Text>
+                                        </View>
+                                        <View style={styles.expenseIconContainer}>
+                                            <Ionicons
+                                                name={expense.category_icon || "receipt-outline"}
+                                                size={24}
+                                                color="#4F4F4F"
+                                            />
+                                        </View>
+                                        <View style={styles.expenseDetails}>
+                                            <Text
+                                                style={styles.expenseDescription}
+                                                numberOfLines={1}
+                                                ellipsizeMode="tail"
+                                            >
+                                                {expense.description}
+                                            </Text>
+                                            <Text style={styles.paidByText}>
+                                                {expense.paid_by_user
+                                                    ? `Pagou ${expense.total_amount.toFixed(2)} €`
+                                                    : `${friendFirstName} pagou ${expense.total_amount.toFixed(
+                                                        2
+                                                    )} €`}
+                                            </Text>
+                                        </View>
+                                        <View style={styles.expenseShareContainer}>
+                                            <Text style={[styles.expenseShareAmount, shareColor]}>
+                                                {userShareAbs} €
+                                            </Text>
+                                            <Text style={[styles.expenseShareLabel, shareColor]}>
+                                                {shareText}
+                                            </Text>
+                                        </View>
                                     </View>
                                 </Swipeable>
                             );
@@ -704,6 +780,15 @@ export default function FriendExpensesScreen() {
                     </View>
                 ))}
             </ScrollView>
+            {isDeleting && (
+                <View style={styles.loadingOverlay}>
+                    {/* <BlurView intensity={Platform.OS === 'ios' ? 20 : 80} tint="light" style={StyleSheet.absoluteFill} /> */}
+                    <View style={styles.actualLoadingBox}>
+                        <ActivityIndicator size="large" color="#FFFFFF" />
+                        <Text style={styles.loadingText}>A eliminar...</Text>
+                    </View>
+                </View>
+            )}
         </View>
     );
 }
@@ -916,5 +1001,34 @@ const styles = StyleSheet.create({
         width: DELETE_BUTTON_WIDTH,
         justifyContent: 'center',
         alignItems: 'center',
+    },
+    skeletonMonthYearText: {
+        backgroundColor: '#E0E0E0',
+        width: '40%',
+        height: 16,
+        borderRadius: 4,
+        marginBottom: 15, // Espaço extra
+    },
+    skeletonItem: { // Para dar um aspeto de "loading" ao item
+        backgroundColor: '#F0F0F0', // Cor de fundo do esqueleto
+        opacity: 0.7,
+    },
+    loadingOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 1000,
+    },
+    actualLoadingBox: { // Para o conteúdo dentro do BlurView
+        padding: 20,
+        backgroundColor: 'rgba(0,0,0,0.7)', // Fundo escuro para o spinner e texto
+        borderRadius: 10,
+        alignItems: 'center',
+    },
+    loadingText: {
+        marginTop: 15,
+        color: '#FFFFFF',
+        fontSize: 16, // Ajustado
+        fontWeight: '500',
     },
 });

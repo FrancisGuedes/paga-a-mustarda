@@ -24,8 +24,8 @@ function ProtectedNavigation() {
   const router = useRouter();
 
   useEffect(() => {
-    console.log("[ProtectedNavigation] Auth state changed: ", auth.user ? auth.user.id : 'null', "isLoading:", auth.isLoading);
-    console.log("[ProtectedNavigation] Current segments: ", segments);
+    // console.log("[ProtectedNavigation] Auth state changed: ", auth.user ? auth.user.id : 'null', "isLoading:", auth.isLoading);
+    // console.log("[ProtectedNavigation] Current segments: ", segments);
 
     if (auth.isLoading) {
       console.log("[ProtectedNavigation] Auth is loading, returning null (SplashScreen is active).");
@@ -38,11 +38,11 @@ function ProtectedNavigation() {
 
     if (!auth.user && !inAuthPages) {
       // Se não há utilizador e NÃO estamos no grupo (auth), redireciona para login
-      console.log("[ProtectedNavigation] No user, not in auth pages. Redirecting to login.");
+      //console.log("[ProtectedNavigation] No user, not in auth pages. Redirecting to login.");
       router.replace('/(auth)/login');
     } else if (auth.user && inAuthPages) {
       // Se há utilizador e estamos no grupo (auth) (ex: acabou de fazer login), redireciona para tabs
-      console.log("[ProtectedNavigation] User exists, and in auth pages. Redirecting to tabs.");
+      //console.log("[ProtectedNavigation] User exists, and in auth pages. Redirecting to tabs.");
       router.replace('/(tabs)');
     } else {
       console.log("[ProtectedNavigation] Navigation state is stable or handled by current route.");

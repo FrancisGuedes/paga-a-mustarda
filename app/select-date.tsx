@@ -1,5 +1,5 @@
 // app/select-date-modal.tsx
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, StyleSheet, TouchableOpacity, Text, Platform, Alert } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
 import { Calendar, LocaleConfig, CalendarProps } from 'react-native-calendars';
@@ -31,15 +31,23 @@ export default function SelectDateScreen() {
     const todayString = today.toISOString().split('T')[0]; // Formato YYYY-MM-DD
 
     const [selectedDate, setSelectedDate] = useState<string>(params.currentDate || todayString);
+    // console.log(`[SelectDateScreen] Data inicial (${selectedDate})`);
 
     const onDayPress: CalendarProps['onDayPress'] = (day) => {
-        console.log('Dia selecionado', day.dateString);
         setSelectedDate(day.dateString);
+        //console.log('[onDayPress] Dia selecionado', day.dateString);
     };
 
-    const handleDone = async () => {
+    const handleDone = useCallback(async () => {
+        const [year, month, day] = selectedDate.split('-').map(Number);
+        const finalDate = new Date();
+        finalDate.setFullYear(year);
+        finalDate.setMonth(month - 1);
+        finalDate.setDate(day);
+        const finalDateISOString = finalDate.toISOString();
+        //console.log('[handleDone] Dia selecionado', finalDateISOString);
         try {
-            await AsyncStorage.setItem(SELECTED_EXPENSE_DATE_KEY, selectedDate);
+            await AsyncStorage.setItem(SELECTED_EXPENSE_DATE_KEY, finalDateISOString);
             console.log(`[SelectDateModal] Data selecionada (${selectedDate}) guardada no AsyncStorage.`);
             if (router.canGoBack()) {
                 router.back();
@@ -48,13 +56,13 @@ export default function SelectDateScreen() {
             console.error("Erro ao guardar data selecionada:", e);
             Alert.alert("Erro", "Não foi possível guardar a data selecionada.");
         }
-    };
+    }, [selectedDate, router]);
 
     useEffect(() => {
         navigation.setOptions({
             presentation: 'modal',
-            headerShown: true, // Garante que o header é mostrado
-            title: 'Escolha a data', // Título como na imagem
+            headerShown: true,
+            title: 'Escolha a data',
             headerLeft: () => (
                 Platform.OS === 'ios' ? (
                 <TouchableOpacity onPress={() => router.back()} style={styles.headerButton}>
@@ -76,17 +84,17 @@ export default function SelectDateScreen() {
         <View style={[styles.screenContainer, { paddingTop: insets.top, paddingBottom: insets.bottom || 10 }]}>
             <View style={styles.screenContentContainer}>
                 <Calendar
-                    current={selectedDate} // Data inicial para o calendário
-                    minDate={'2000-01-01'} // Data mínima selecionável
-                    maxDate={todayString} // Data máxima selecionável (hoje)
+                    current={selectedDate}
+                    minDate={'2000-01-01'}
+                    maxDate={todayString}
                     onDayPress={onDayPress}
                     monthFormat={'MMMM yyyy'}
                     hideExtraDays={true}
-                    firstDay={1} // Segunda-feira como primeiro dia da semana
+                    firstDay={1}
                     enableSwipeMonths={true}
                     markedDates={{
                         [selectedDate]: { selected: true, marked: true, selectedColor: '#007AFF' },
-                        [todayString]: { marked: true, dotColor: '#007AFF', activeOpacity: 0 } // Marca o dia de hoje
+                        [todayString]: { marked: true, dotColor: '#007AFF', activeOpacity: 0 }
                     }}
                     theme={{
                         arrowColor: '#007AFF',
@@ -123,7 +131,7 @@ export default function SelectDateScreen() {
 const styles = StyleSheet.create({
     screenContainer: {
         flex: 1,
-        backgroundColor: Platform.OS === 'ios' ? '#FFFFFF' : '#FFFFFF', // Fundo ligeiramente diferente para iOS modal
+        backgroundColor: '#FFFFFF',
     },
     screenContentContainer: {
         paddingHorizontal: '8%',
@@ -137,7 +145,7 @@ const styles = StyleSheet.create({
         fontSize: 17,
     },
     headerButtonDone: {
-        fontWeight: '600', // "Concluído" em negrito como no iOS
+        fontWeight: '600',
     },
     calendar: {
         borderWidth: 0,
@@ -152,9 +160,9 @@ const styles = StyleSheet.create({
         // borderBottomColor: Platform.OS === 'android' ? '#D1D1D6' : undefined,
     },
     bottomOptionsContainer: {
-        marginTop: 20, // Espaço acima das opções inferiores
+        marginTop: 20,
         paddingHorizontal: 16,
-        backgroundColor: '#FFFFFF' // Fundo branco para a secção de opções
+        backgroundColor: '#FFFFFF'
     },
     bottomOptionButton: {
         flexDirection: 'row',
@@ -172,20 +180,20 @@ const styles = StyleSheet.create({
         marginRight: 6,
     },
     bottomOptionsSectionContainer: {
-        flexDirection: 'row', // <--- ALTERADO: para colocar os botões em linha
-        justifyContent: 'space-between', // <--- ALTERADO: para empurrar para os extremos
-        alignItems: 'center', // <--- ALTERADO: para alinhar verticalmente
-        marginTop: 20, // Espaço entre o calendário e esta secção
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginTop: 20,
         paddingVertical: 8, 
-        paddingHorizontal: 16, // Padding horizontal para a secção inteira
+        paddingHorizontal: 16,
         backgroundColor: '#FFFFFF', 
     },
     bottomOptionButtonLeft: {
         paddingVertical: 12, 
-        alignItems: 'flex-start', // Se quiser o texto alinhado à esquerda dentro do botão
+        alignItems: 'flex-start',
     },
     bottomOptionButtonRight: {
         paddingVertical: 12,
-        alignItems: 'flex-end', // Se quiser o conteúdo alinhado à direita dentro do botão
+        alignItems: 'flex-end',
     },
 });

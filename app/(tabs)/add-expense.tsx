@@ -64,7 +64,32 @@ export default function AddExpenseScreen() {
     );
     const [isSaving, setIsSaving] = useState(false);
     // Novo estado para a data da despesa, inicializado com a data atual no formato YYYY-MM-DD
-    const [expenseDate, setExpenseDate] = useState<string>(new Date().toISOString().split('T')[0]);
+    const [expenseDate, setExpenseDate] = useState<string>(new Date().toISOString());
+    console.log("[AddExpenseScreen] Data inicial:", new Date().toISOString());
+    console.log("[AddExpenseScreen] Data inicial expenseDate:", expenseDate);
+
+    const formatDateForDisplays = (isoDateString: string): string => {
+        if (!isoDateString) return 'Hoje';
+        try {
+            const date = new Date(isoDateString);
+            if (isNaN(date.getTime())) return 'Hoje';
+
+            const today = new Date();
+            const isToday = date.getUTCFullYear() === today.getUTCFullYear() &&
+                            date.getUTCMonth() === today.getUTCMonth() &&
+                            date.getUTCDate() === today.getUTCDate();
+
+            if (isToday) {
+                // Se for hoje, pode mostrar "Hoje, HH:mm"
+                return `Hoje, ${date.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })}`;
+            }
+            // Para outras datas, mostra "DD de Mês, HH:mm"
+            return `${date.toLocaleDateString('pt-PT', { day: 'numeric' })} de ${date.toLocaleDateString('pt-PT', { month: 'short' }).replace('.','')}, ${date.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })}`;
+        } catch (e) {
+            console.error("Erro ao formatar data:", isoDateString, e);
+            return 'Hoje'; // Fallback
+        }
+    };
 
     // Efeito para definir o amigo selecionado APENAS quando os PARÂMETROS DA ROTA mudam
     useEffect(() => {
@@ -213,29 +238,34 @@ export default function AddExpenseScreen() {
     // (caso o utilizador tenha selecionado uma no ecrã SelectSplitTypeScreen)
     useEffect(() => {
         const unsubscribe = navigation.addListener("focus", async () => {
-            console.log("AddExpenseScreen GANHOU FOCO (via listener)");
+            console.log("[Focus Listener] GANHOU FOCO (via listener)");
+            let dateFromStorage: string | null = null;
             try {
-                const storedOptionJson = await AsyncStorage.getItem(
-                    ASYNC_STORAGE_SELECTED_SPLIT_OPTION_KEY
-                );
+                const storedOptionJson = await AsyncStorage.getItem(ASYNC_STORAGE_SELECTED_SPLIT_OPTION_KEY);
+                console.log("[Focus Listener] Opção de DIVISÃO carregada do AsyncStorage", storedOptionJson);
                 if (storedOptionJson) {
                     const storedOption = JSON.parse(storedOptionJson) as SplitTypeOption;
-                    console.log(
-                        "[Focus Listener] Opção carregada do AsyncStorage:",
-                        storedOption.description_template
-                    );
+                    await AsyncStorage.removeItem(ASYNC_STORAGE_SELECTED_SPLIT_OPTION_KEY);
+                    console.log("[Focus Listener] Opção carregada e transformada", storedOption.description_template);
                     setSelectedSplitOption(storedOption);
                     setIsLoadingSplitOption(false); // Se carregou do cache, não está mais a carregar
-                } else if (!selectedSplitOption) {
-                    // Se não há nada no cache e nada no estado, aciona o loadSplitOption
-                    // para buscar a default do Supabase.
+                } else if (!selectedSplitOption && !isLoadingSplitOption ) {
+                    console.log("[Focus Listener] Não há opção na cache, a carregar default...");
                     loadSplitOption();
                 }
+                // Carregar data selecionada
+                const storedDateISO = await AsyncStorage.getItem(SELECTED_EXPENSE_DATE_KEY);
+                console.log("[Focus Listener] Opção DATA carregada do AsyncStorage", storedOptionJson);
+                if (storedDateISO) {
+                    dateFromStorage = storedDateISO;
+                    if (dateFromStorage) {
+                        setExpenseDate(dateFromStorage);
+                    }
+                    console.log("[FocusEffect] Data (ISO) carregada do AsyncStorage:", storedDateISO);
+                    await AsyncStorage.removeItem(SELECTED_EXPENSE_DATE_KEY);
+                }
             } catch (e) {
-                console.error(
-                    "Erro ao ler 'selected_split_option' do AsyncStorage no focus:",
-                    e
-                );
+                console.error("Erro ao ler 'selected_split_option' do AsyncStorage no focus:", e);
             }
         });
         return unsubscribe;
@@ -313,7 +343,7 @@ export default function AddExpenseScreen() {
                 return;
         }
 
-        console.log("[AddExpense] User Share:", userShare, "Split type:", selectedSplitOption.split_type);
+        console.log("[AddExpense] pick date:", expenseDate, "User Share:", userShare, "Split type:", selectedSplitOption.split_type);
         try {
             const newExpense = {
                 user_id: auth.user.id,
@@ -566,7 +596,10 @@ export default function AddExpenseScreen() {
                                 <Ionicons name="calendar-outline" size={24} color="#555" style={styles.controlIcon} />
                                 {/* Mostra a data selecionada ou "Hoje" */}
                                 <Text style={styles.controlButtonText}>
-                                    {expenseDate === new Date().toISOString().split('T')[0] ? 'Hoje' : formatDateForDisplay(expenseDate)}
+                                    {
+                                        expenseDate.split('T')[0] === new Date().toISOString().split('T')[0] ? 
+                                        'Hoje' : formatDateForDisplay(expenseDate)
+                                    }
                                 </Text>
                             </TouchableOpacity>
                             {/* <TouchableOpacity style={styles.controlButton}>

@@ -79,6 +79,11 @@ function ProtectedNavigation() {
         options={{ 
           presentation: 'modal' 
         }} />
+      <Stack.Screen 
+        name="add-expense-modal"
+        options={{ 
+          presentation: 'modal' 
+        }} />
       <Stack.Screen name="+not-found" />
     </Stack>
   );

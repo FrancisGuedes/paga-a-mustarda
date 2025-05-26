@@ -74,13 +74,19 @@ export default function TabLayout() {
                 const friendId = potentialId;
                 console.log(`A navegar para adicionar despesa para o amigo: ${currentFriend?.name}`);
 
-                router.push({
+                /* router.push({
                   pathname: '/add-expense',
                   params: { 
                     friendId: currentFriend?.id,
                     friendName: currentFriend?.name,
                     friendAvatarUrl: currentFriend?.avatarUrl || undefined,
                   },
+                }); */
+                router.push({pathname: '/add-expense-modal',
+                  params: {
+                    friendId: currentFriend?.id,
+                    friendName: currentFriend?.name
+                  }
                 });
               } else if (currentFolderName === '(tabs)' && currentScreenName ==='groups') {
                 // Estamos no ecrã de grupos

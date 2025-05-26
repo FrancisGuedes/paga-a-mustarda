@@ -1,12 +1,15 @@
 // app/(tabs)/friend/expense/[expenseId].tsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Alert, Platform, ActivityIndicator, Button, KeyboardAvoidingView } from 'react-native';
-import { Stack, useLocalSearchParams, useRouter, useNavigation } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter, useNavigation, router } from 'expo-router';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../../../../config/supabase'; // Ajuste o caminho
 import { useAuth } from '../../../../context/AuthContext'; // Ajuste o caminho
-import type { Expense } from '../[friendId]'; // Importa a interface Expense do ecrã anterior
+import { EXPENSES_STORAGE_KEY_PREFIX, type Expense } from '../[friendId]'; // Importa a interface Expense do ecrã anterior
+import { capitalizeFirstLetter } from '@/utils/tabsUtils';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { FRIENDS_STORAGE_KEY_PREFIX } from '../..';
 
 const DEFAULT_USER_AVATAR = 'https://via.placeholder.com/80/007AFF/FFFFFF?Text=EU';
 const DEFAULT_FRIEND_AVATAR_DETAIL = 'https://via.placeholder.com/80/CEDAEF/000000?Text=';
@@ -65,6 +68,7 @@ export default function ExpenseDetailScreen() {
     const [expense, setExpense] = useState<Expense | null>(null);
     const [isLoading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     const friendName = params.friendName ? decodeURIComponent(params.friendName) : 'Amigo';
     const friendAvatar = `${DEFAULT_FRIEND_AVATAR_DETAIL}${friendName.charAt(0)}`;
@@ -104,6 +108,114 @@ export default function ExpenseDetailScreen() {
         fetchExpenseDetails();
     }, [fetchExpenseDetails]);
 
+    const performDeleteAndReload = useCallback(async () => {
+        console.log("A eliminar despesa ID:", params?.expenseId);
+        
+        if (!expense?.id) return;
+        
+        setIsDeleting(true);
+
+        try {
+            // 1. Eliminar a despesa da tabela 'expenses'
+            const { error: deleteError } = await supabase
+                .from('expenses')
+                .delete()
+                .eq('id', expense.id);
+
+            if (deleteError) {
+                Alert.alert("Erro", "Não foi possível eliminar a despesa.");
+                console.error("Erro ao eliminar despesa:", deleteError);
+                setIsDeleting(false);
+                return;
+            }
+
+            // 2. Atualizar o 'balance' na tabela 'friends'
+            /* const expensesBeforeDelete = expense;
+            setExpense(prevExpense => prevExpense?.filter(exp => exp.id !== expenseId));
+
+            const updatedExpenses = expense.filter(exp => exp.id !== expenseId);
+            setExpense(updatedExpenses); */
+
+            if (params.friendId) {
+                const { data: friendData, error: friendFetchError } = await supabase
+                    .from('friends')
+                    .select('balance')
+                    .eq('user_id', auth.user?.id) // O registo de amizade pertence ao utilizador logado
+                    .eq('id', params.friendId)   // E é para este amigo específico
+                    .single();
+
+                if (friendFetchError && friendFetchError.code !== 'PGRST116') 
+                    throw friendFetchError;
+                const currentFriendBalance = friendData?.balance || 0;
+                const newFriendBalance = currentFriendBalance - expense.user_share; // Subtrai o user_share da despesa eliminada
+
+                const { error: friendUpdateError } = await supabase
+                    .from('friends')
+                    .update({ 
+                        balance: newFriendBalance, 
+                        updated_at: new Date().toISOString() 
+                    })
+                    .eq('user_id', auth.user?.id)
+                    .eq('id', params.friendId)
+                    .throwOnError();
+
+                if (friendUpdateError) throw friendUpdateError;
+                console.log("[ExpenseDetail] Saldo do amigo atualizado para:", newFriendBalance);
+            }
+
+            // Invalidar o cache de despesas do amigo para forçar o recarregamento no ecrã anterior
+            const friendExpensesCacheKey = `${EXPENSES_STORAGE_KEY_PREFIX}${auth.user?.id}_friend_${params.friendId}`;
+            await AsyncStorage.removeItem(friendExpensesCacheKey);
+            console.log(`Cache de despesas para amigo ${params.friendId} invalidado.`);
+
+            // Invalidar o cache da lista de amigos para forçar o recarregamento do saldo no ecrã index
+            const friendsListCacheKey = `${FRIENDS_STORAGE_KEY_PREFIX}${auth.user?.id}`; // Use a chave correta do FriendsScreen
+            await AsyncStorage.removeItem(friendsListCacheKey);
+            console.log("Cache da lista de amigos invalidado.");
+
+            // Navegar de volta
+            if (params.friendId && params.friendName) {
+                router.replace({
+                    pathname: "/(tabs)/friend/[friendId]",
+                    params: { friendId: params.friendId, name: params.friendName }
+                });
+            } else {
+                router.replace('/(tabs)');
+            }
+
+        } catch (e: any) {
+            console.error("Error deleting expense:", e);
+            Alert.alert("Erro", "Não foi possível apagar a despesa.");
+        } finally {
+            setIsDeleting(false);
+        }
+
+    }, [expense, auth.user, params.friendId, router]);
+
+    const confirmAndDeleteExpense = () => {
+        Alert.alert(
+            "Eliminar Despesa",
+            "Tem a certeza que quer eliminar esta despesa? Esta ação vai remover esta despesa para TODOS os utilizadores envolvidos e não apenas para si",
+            [
+                {
+                    text: "Cancelar",
+                    style: "cancel",
+                    onPress: () => router.replace({
+                        pathname: "/(tabs)/friend/expense/[expenseId]",
+                        params: { expenseId: params.expenseId, friendId: params.friendId, name: params.friendName }
+                    })
+                },
+                {
+                    text: "Ok",
+                    style: "destructive",
+                    onPress: async () => {
+                        await performDeleteAndReload();
+                    }
+                }
+            ]
+        );
+    };
+
     const handleBackPress = useCallback(() => {
         if (router.canGoBack() && params.friendId && params.friendName) {
             router.replace({
@@ -133,7 +245,7 @@ export default function ExpenseDetailScreen() {
             headerRight: () => (
                 <View style={styles.headerRightContainer}>
                     <TouchableOpacity
-                        onPress={() => Alert.alert("Eliminar", `Eliminar despesa: ${expense?.description}?`)}
+                        onPress={confirmAndDeleteExpense}
                         style={styles.headerIconButton}
                     >
                         <Ionicons name="trash-outline" size={24} color={Platform.OS === 'ios' ? '#000' : '#000'} />
@@ -162,7 +274,8 @@ export default function ExpenseDetailScreen() {
 
     // Lógica para determinar os textos de "Deve a" e "X deve"
     const expenseDate = new Date(expense.date);
-    const formattedDate = `${expenseDate.toLocaleDateString('pt-PT', { day: 'numeric' })} de ${expenseDate.toLocaleDateString('pt-PT', { month: 'long' })} de ${expenseDate.getFullYear()}`;
+    const monthName = expenseDate.toLocaleString('pt-PT', { month: 'long' });
+    const formattedDate = `${expenseDate.toLocaleDateString('pt-PT', { day: 'numeric' })} de ${capitalizeFirstLetter(monthName)} de ${expenseDate.getFullYear()}`;
     const whoAdded = expense.paid_by_user ? "si" : friendName.split(' ')[0]; // Simplificado
 
     // user_share: Positivo se o amigo deve ao user_id, negativo se user_id deve ao amigo

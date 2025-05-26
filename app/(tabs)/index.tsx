@@ -33,7 +33,7 @@ interface Friend {
   updated_at?: string | null;
 }
 
-const FRIENDS_STORAGE_KEY_PREFIX = 'paga_a_mostarda_friends_cache_';
+export const FRIENDS_STORAGE_KEY_PREFIX = 'paga_a_mostarda_friends_cache_';
 
 // --- Componentes Skeleton ---
 const SkeletonPlaceholder = ({ width, height, style, circle = false }: { width: number | string; height: number; style?: object, circle?: boolean }) => (

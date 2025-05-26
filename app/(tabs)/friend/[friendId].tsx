@@ -56,7 +56,7 @@ interface GroupedExpenses {
     [monthYear: string]: Expense[];
 }
 
-const EXPENSES_STORAGE_KEY_PREFIX = "paga_a_mostarda_expenses_cache_v3_";
+export const EXPENSES_STORAGE_KEY_PREFIX = "paga_a_mostarda_expenses_cache_v3_";
 const DELETE_BUTTON_WIDTH = 80; // Largura do botão de eliminar
 //const FULL_SWIPE_DELETE_THRESHOLD = 300; // Largura mínima para considerar um swipe completo para eliminar
 const DEFAULT_FRIEND_AVATAR = 'https://ui-avatars.com/api/?background=0D8ABC&color=fff&size=100&rounded=true&name=';
@@ -151,9 +151,7 @@ const SkeletonExpenseItem = () => (
     </View>
 );
 
-const SkeletonMonthSection = ({ monthYearPlaceholder, skeletonItemCount }: 
-    { monthYearPlaceholder: string, skeletonItemCount: number }
-) => (
+const SkeletonMonthSection = ({ monthYearPlaceholder, skeletonItemCount }: { monthYearPlaceholder: string, skeletonItemCount: number }) => (
     <View style={styles.monthSection}>
         <Text style={[styles.monthYearText, styles.skeletonMonthYearText]}>
             {monthYearPlaceholder}
@@ -419,15 +417,27 @@ export default function FriendExpensesScreen() {
 
         try {
             if (auth.user?.id && routeFriendId) {
-                const { data: friendData, error: friendFetchError } = await supabase.from('friends').select('balance').eq('user_id', auth.user.id).eq('id', routeFriendId).single();
-                if (friendFetchError && friendFetchError.code !== 'PGRST116') throw friendFetchError;
+                const { data: friendData, error: friendFetchError } = await supabase
+                    .from('friends')
+                    .select('balance')
+                    .eq('user_id', auth.user.id)
+                    .eq('id', routeFriendId)
+                    .single();
+
+                if (friendFetchError && friendFetchError.code !== 'PGRST116') 
+                    throw friendFetchError;
                 const currentFriendBalance = friendData?.balance || 0;
                 const newFriendBalance = currentFriendBalance - userShareToReverse;
-                await supabase
+
+                const { error: friendUpdateError } = await supabase
                     .from('friends')
                     .update({ balance: newFriendBalance, updated_at: new Date().toISOString() })
-                    .eq('user_id', auth.user.id).eq('id', routeFriendId)
+                    .eq('user_id', auth.user.id)
+                    .eq('id', routeFriendId)
                     .throwOnError();
+
+                if (friendUpdateError) throw friendUpdateError;
+
                 console.log("Saldo do amigo atualizado após eliminação para:", newFriendBalance);
             }
             const storageKey = getExpensesStorageKey();

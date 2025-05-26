@@ -391,7 +391,7 @@ export default function FriendExpensesScreen() {
 
     const performDeleteAndReload = async (expenseId: string, userShareToReverse: number) => {
         setIsDeleting(true);
-        swipeableRefs.current[expenseId]?.close();
+        //swipeableRefs.current[expenseId]?.close();
 
         console.log("A eliminar despesa ID:", expenseId);
         // Fechar o swipeable antes de eliminar, se ainda não estiver fechado
@@ -743,51 +743,68 @@ export default function FriendExpensesScreen() {
                                     // leftThreshold define quão longe precisa arrastar para as RightActions ficarem abertas
                                     leftThreshold={DELETE_BUTTON_WIDTH / 2} // Abrir o botão com um swipe menor
                                 >
-                                    <View
-                                        style={styles.expenseItem}
-                                        onLayout={(event) => {
-                                            const { height } = event.nativeEvent.layout;
-                                            if (typeof height === 'number' && !isNaN(height)) {
-                                                setItemHeights(prev => ({ ...prev, [expense.id]: height }));
+                                    <TouchableOpacity
+                                        activeOpacity={0.7}
+                                        onPress={() => {
+                                            if (currentlyOpenSwipeableId.current) {
+                                                swipeableRefs.current[currentlyOpenSwipeableId.current]?.close();
                                             }
+                                            router.push({
+                                                pathname: "/friend/expense/[expenseId]", // Navega para a sub-rota de detalhe
+                                                params: { 
+                                                    expenseId: expense.id,
+                                                    friendId: routeFriendId,
+                                                    friendName: friendName,
+                                                }
+                                            });
                                         }}
                                     >
-                                        <View style={styles.expenseDateContainer}>
-                                            <Text style={styles.expenseDay}>{day}</Text>
-                                            <Text style={styles.expenseMonth}>{monthAbbrev}</Text>
+                                        <View
+                                            style={styles.expenseItem}
+                                            onLayout={(event) => {
+                                                const { height } = event.nativeEvent.layout;
+                                                if (typeof height === 'number' && !isNaN(height)) {
+                                                    setItemHeights(prev => ({ ...prev, [expense.id]: height }));
+                                                }
+                                            }}
+                                        >
+                                            <View style={styles.expenseDateContainer}>
+                                                <Text style={styles.expenseDay}>{day}</Text>
+                                                <Text style={styles.expenseMonth}>{monthAbbrev}</Text>
+                                            </View>
+                                            <View style={styles.expenseIconContainer}>
+                                                <Ionicons
+                                                    name={expense.category_icon || "receipt-outline"}
+                                                    size={24}
+                                                    color="#4F4F4F"
+                                                />
+                                            </View>
+                                            <View style={styles.expenseDetails}>
+                                                <Text
+                                                    style={styles.expenseDescription}
+                                                    numberOfLines={1}
+                                                    ellipsizeMode="tail"
+                                                >
+                                                    {expense.description}
+                                                </Text>
+                                                <Text style={styles.paidByText}>
+                                                    {expense.paid_by_user
+                                                        ? `Pagou ${expense.total_amount.toFixed(2)} €`
+                                                        : `${friendFirstName} pagou ${expense.total_amount.toFixed(
+                                                            2
+                                                        )} €`}
+                                                </Text>
+                                            </View>
+                                            <View style={styles.expenseShareContainer}>
+                                                <Text style={[styles.expenseShareAmount, shareColor]}>
+                                                    {userShareAbs} €
+                                                </Text>
+                                                <Text style={[styles.expenseShareLabel, shareColor]}>
+                                                    {shareText}
+                                                </Text>
+                                            </View>
                                         </View>
-                                        <View style={styles.expenseIconContainer}>
-                                            <Ionicons
-                                                name={expense.category_icon || "receipt-outline"}
-                                                size={24}
-                                                color="#4F4F4F"
-                                            />
-                                        </View>
-                                        <View style={styles.expenseDetails}>
-                                            <Text
-                                                style={styles.expenseDescription}
-                                                numberOfLines={1}
-                                                ellipsizeMode="tail"
-                                            >
-                                                {expense.description}
-                                            </Text>
-                                            <Text style={styles.paidByText}>
-                                                {expense.paid_by_user
-                                                    ? `Pagou ${expense.total_amount.toFixed(2)} €`
-                                                    : `${friendFirstName} pagou ${expense.total_amount.toFixed(
-                                                        2
-                                                    )} €`}
-                                            </Text>
-                                        </View>
-                                        <View style={styles.expenseShareContainer}>
-                                            <Text style={[styles.expenseShareAmount, shareColor]}>
-                                                {userShareAbs} €
-                                            </Text>
-                                            <Text style={[styles.expenseShareLabel, shareColor]}>
-                                                {shareText}
-                                            </Text>
-                                        </View>
-                                    </View>
+                                    </TouchableOpacity>
                                 </Swipeable>
                             );
                         })}

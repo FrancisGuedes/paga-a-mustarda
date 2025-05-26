@@ -126,6 +126,12 @@ export default function TabLayout() {
           href: null 
         }} 
       />
+      <Tabs.Screen
+        name="friend/expense/[expenseId]"
+        options={{
+          href: null,
+        }}
+      />
     </Tabs>
   );
 }

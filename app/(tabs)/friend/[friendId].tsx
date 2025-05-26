@@ -1,5 +1,5 @@
 // app/(tabs)/friend/[friendId].tsx
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState, useRef, useCallback, useEffect } from "react";
 import {
     View,
     Text,
@@ -129,9 +129,44 @@ const SwipeableDeleteAction = ({ dragX, onPress, itemHeight }: {
 };
 
 // --- Componentes Skeleton ---
-const SkeletonPlaceholder = ({ width, height, style }: { width: number | string; height: number; style?: object }) => (
-    <View style={[{ width, height, backgroundColor: '#E0E0E0', borderRadius: 4 }, style]} />
-);
+const SkeletonPlaceholder = ({ width, height, style, circle = false }: { width: number | string; height: number; style?: object, circle?: boolean }) => {
+    const pulseAnim = useRef(new Animated.Value(0)).current; // Valor inicial para a animação
+
+    useEffect(() => {
+        const sharedAnimation = Animated.loop(
+        Animated.sequence([
+            Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 700, // Duração da animação para ficar mais opaco
+            useNativeDriver: true, // Importante para performance
+            }),
+            Animated.timing(pulseAnim, {
+            toValue: 0,
+            duration: 700, // Duração da animação para ficar menos opaco
+            useNativeDriver: true,
+            }),
+        ])
+        );
+        sharedAnimation.start();
+        return () => {
+        sharedAnimation.stop(); // Para a animação quando o componente é desmontado
+        };
+    }, [pulseAnim]);
+
+    const animatedOpacity = pulseAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange: [0.5, 1], // Opacidade varia entre 0.5 e 1
+    });
+
+    return (
+        <Animated.View 
+        style={[
+            { width, height, backgroundColor: '#E0E0E0', borderRadius: circle ? height / 2 : 4, opacity: animatedOpacity }, 
+            style
+        ]} 
+        />
+    );
+};
 
 const SkeletonExpenseItem = () => (
     <View style={[styles.expenseItem, styles.skeletonItem]}>

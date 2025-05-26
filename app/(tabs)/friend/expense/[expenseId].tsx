@@ -1,6 +1,6 @@
 // app/(tabs)/friend/expense/[expenseId].tsx
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Alert, Platform, ActivityIndicator, Button, KeyboardAvoidingView } from 'react-native';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Alert, Platform, ActivityIndicator, Button, KeyboardAvoidingView, Animated } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter, useNavigation, router } from 'expo-router';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,9 +16,44 @@ const DEFAULT_FRIEND_AVATAR_DETAIL = 'https://via.placeholder.com/80/CEDAEF/0000
 export const EXPENSE_DELETED_SIGNAL_KEY = "paga_a_mostarda_expense_deleted_signal";
 
 // --- Componentes Skeleton ---
-const SkeletonPlaceholder = ({ width, height, style, circle = false }: { width: number | string; height: number; style?: object, circle?: boolean }) => (
-    <View style={[{ width, height, backgroundColor: '#E9E9EF', borderRadius: circle ? height / 2 : 6 }, style]} />
-);
+const SkeletonPlaceholder = ({ width, height, style, circle = false }: { width: number | string; height: number; style?: object, circle?: boolean }) => {
+    const pulseAnim = useRef(new Animated.Value(0)).current; // Valor inicial para a animação
+
+    useEffect(() => {
+        const sharedAnimation = Animated.loop(
+        Animated.sequence([
+            Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 700, // Duração da animação para ficar mais opaco
+            useNativeDriver: true, // Importante para performance
+            }),
+            Animated.timing(pulseAnim, {
+            toValue: 0,
+            duration: 700, // Duração da animação para ficar menos opaco
+            useNativeDriver: true,
+            }),
+        ])
+        );
+        sharedAnimation.start();
+        return () => {
+        sharedAnimation.stop(); // Para a animação quando o componente é desmontado
+        };
+    }, [pulseAnim]);
+
+    const animatedOpacity = pulseAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange: [0.5, 1], // Opacidade varia entre 0.5 e 1
+    });
+
+    return (
+        <Animated.View 
+        style={[
+            { width, height, backgroundColor: '#E0E0E0', borderRadius: circle ? height / 2 : 4, opacity: animatedOpacity }, 
+            style
+        ]} 
+        />
+    );
+};
 const SkeletonExpenseDetail = () => {
     const insets = useSafeAreaInsets(); // Para o padding do ecrã de loading
     return (

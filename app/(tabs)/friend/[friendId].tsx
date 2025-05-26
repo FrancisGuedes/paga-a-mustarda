@@ -35,6 +35,7 @@ import Reanimated, {
     SharedValue,
     Extrapolation
 } from 'react-native-reanimated';
+import { EXPENSE_DELETED_SIGNAL_KEY } from "./expense/[expenseId]";
 
 // Interface para Despesa
 export interface Expense {
@@ -57,6 +58,7 @@ interface GroupedExpenses {
 }
 
 export const EXPENSES_STORAGE_KEY_PREFIX = "paga_a_mostarda_expenses_cache_v3_";
+
 const DELETE_BUTTON_WIDTH = 80; // Largura do botão de eliminar
 //const FULL_SWIPE_DELETE_THRESHOLD = 300; // Largura mínima para considerar um swipe completo para eliminar
 const DEFAULT_FRIEND_AVATAR = 'https://ui-avatars.com/api/?background=0D8ABC&color=fff&size=100&rounded=true&name=';
@@ -225,7 +227,7 @@ export default function FriendExpensesScreen() {
                 .select("*")
                 .eq("user_id", userId) // Despesas onde o utilizador logado é o 'user_id'
                 .eq("friend_id", friendIdParam) // E o amigo é o 'friend_id'
-                .order("date", { ascending: false });
+                .order("date", { ascending: false })
 
             console.log(
                 `[SupabaseFetch] Resposta Supabase (despesas) - Status: ${status}, Erro:`,
@@ -309,36 +311,48 @@ export default function FriendExpensesScreen() {
     useFocusEffect(
         useCallback(() => {
             let isActive = true;
+            const checkSignalAndLoad = async () => {
+                    if (routeFriendId && friendName) {
+                    console.log(
+                        `[FriendExpensesScreen] Focado. Definindo amigo atual: ID=${routeFriendId}, Nome=${friendName}`
+                    );
+                    setCurrentFriend({
+                        id: routeFriendId,
+                        name: friendName,
+                        avatarUrl: routeFriendAvatarUrl,
+                    });
+                }
 
-            if (routeFriendId && friendName) {
-                console.log(
-                    `[FriendExpensesScreen] Focado. Definindo amigo atual: ID=${routeFriendId}, Nome=${friendName}`
-                );
-                setCurrentFriend({
-                    id: routeFriendId,
-                    name: friendName,
-                    avatarUrl: routeFriendAvatarUrl,
-                });
-            }
+                /* if (auth.user && !auth.isLoading && routeFriendId) {
+                        loadExpenses({ forceNetwork: expenses.length === 0 });
+                    } else if (!auth.isLoading && !auth.user) {
+                        setExpenses([]);
+                        const storageKey = getExpensesStorageKey();
+                        if(storageKey) AsyncStorage.removeItem(storageKey);
+                        setLoading(false);
+                    } */
 
-            /* if (auth.user && !auth.isLoading && routeFriendId) {
-                    loadExpenses({ forceNetwork: expenses.length === 0 });
-                } else if (!auth.isLoading && !auth.user) {
+                if (auth.user && !auth.isLoading && routeFriendId && isActive) {
+                    //loadExpenses({ forceNetwork: expenses.length === 0 });
+                    const deleteSignal = await AsyncStorage.getItem(EXPENSE_DELETED_SIGNAL_KEY);
+                    if (deleteSignal === 'true') {
+                        await AsyncStorage.removeItem(EXPENSE_DELETED_SIGNAL_KEY);
+                        console.log("[FriendExpensesScreen] Sinal de eliminação encontrado, a forçar recarregamento com skeleton.");
+                        // Guarda o número atual de despesas (do cache ou estado anterior) para o skeleton
+                        setSkeletonItemCount(expenses.length > 0 ? expenses.length : DEFAULT_SKELETON_COUNT);
+                        loadExpenses({ forceNetwork: true, showSkeleton: true });
+                    } else {
+                        loadExpenses({ forceNetwork: expenses.length === 0 });
+                    }
+                } else if (!auth.isLoading && !auth.user && isActive) {
                     setExpenses([]);
                     const storageKey = getExpensesStorageKey();
-                    if(storageKey) AsyncStorage.removeItem(storageKey);
+                    if (storageKey) AsyncStorage.removeItem(storageKey);
                     setLoading(false);
-                  } */
-
-            if (auth.user && !auth.isLoading && routeFriendId && isActive) {
-                loadExpenses({ forceNetwork: expenses.length === 0 });
-            } else if (!auth.isLoading && !auth.user && isActive) {
-                setExpenses([]);
-                const storageKey = getExpensesStorageKey();
-                if (storageKey) AsyncStorage.removeItem(storageKey);
-                setLoading(false);
+                }
             }
-
+            
+            checkSignalAndLoad();
             return () => {
                 isActive = false;
                 console.log(
@@ -389,7 +403,6 @@ export default function FriendExpensesScreen() {
 
     const performDeleteAndReload = async (expenseId: string, userShareToReverse: number) => {
         setIsDeleting(true);
-        //swipeableRefs.current[expenseId]?.close();
 
         console.log("A eliminar despesa ID:", expenseId);
         // Fechar o swipeable antes de eliminar, se ainda não estiver fechado

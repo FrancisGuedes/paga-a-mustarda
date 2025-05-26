@@ -13,6 +13,7 @@ import { FRIENDS_STORAGE_KEY_PREFIX } from '../..';
 
 const DEFAULT_USER_AVATAR = 'https://via.placeholder.com/80/007AFF/FFFFFF?Text=EU';
 const DEFAULT_FRIEND_AVATAR_DETAIL = 'https://via.placeholder.com/80/CEDAEF/000000?Text=';
+export const EXPENSE_DELETED_SIGNAL_KEY = "paga_a_mostarda_expense_deleted_signal";
 
 // --- Componentes Skeleton ---
 const SkeletonPlaceholder = ({ width, height, style, circle = false }: { width: number | string; height: number; style?: object, circle?: boolean }) => (
@@ -163,15 +164,20 @@ export default function ExpenseDetailScreen() {
                 console.log("[ExpenseDetail] Saldo do amigo atualizado para:", newFriendBalance);
             }
 
-            // Invalidar o cache de despesas do amigo para forçar o recarregamento no ecrã anterior
+            // 3. Invalidar caches para forçar recarregamento nos ecrãs anteriores
+            /// Invalidar o cache de despesas do amigo para forçar o recarregamento no ecrã anterior
             const friendExpensesCacheKey = `${EXPENSES_STORAGE_KEY_PREFIX}${auth.user?.id}_friend_${params.friendId}`;
             await AsyncStorage.removeItem(friendExpensesCacheKey);
             console.log(`Cache de despesas para amigo ${params.friendId} invalidado.`);
 
-            // Invalidar o cache da lista de amigos para forçar o recarregamento do saldo no ecrã index
+            /// Invalidar o cache da lista de amigos para forçar o recarregamento do saldo no ecrã index
             const friendsListCacheKey = `${FRIENDS_STORAGE_KEY_PREFIX}${auth.user?.id}`; // Use a chave correta do FriendsScreen
             await AsyncStorage.removeItem(friendsListCacheKey);
             console.log("Cache da lista de amigos invalidado.");
+
+            // TODO: Sinalizar que uma despesa foi eliminada ?? COMPORTAMENTO estranho -> descomentar
+            // Sinaliza ao ecrã anterior que uma eliminação ocorreu
+            //await AsyncStorage.setItem(EXPENSE_DELETED_SIGNAL_KEY, 'true');
 
             // Navegar de volta
             if (params.friendId && params.friendName) {
@@ -262,7 +268,7 @@ export default function ExpenseDetailScreen() {
     }, [navigation, expense, router]);
 
 
-    if (isLoading || !expense) {
+    if (isLoading || isDeleting || !expense) {
         return <SkeletonExpenseDetail />;
     }
     if (error) {

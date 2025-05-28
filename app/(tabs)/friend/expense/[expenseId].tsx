@@ -99,8 +99,6 @@ export default function ExpenseDetailScreen() {
         friendName?: string;
     }>();
     const { auth } = useAuth();
-    const insets = useSafeAreaInsets();
-
     const [expense, setExpense] = useState<Expense | null>(null);
     const [isLoading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -268,7 +266,29 @@ export default function ExpenseDetailScreen() {
         }
     }, [router]);
 
-    // Configurar o header dinamicamente
+    const handleEditPress = () => {
+
+    if (!expense) return;
+    console.log("A navegar para editar despesa:", expense.id);
+
+    router.push({
+        pathname: '/add-expense-modal', // Rota para o ecrã de adicionar/editar
+        params: {
+            editingExpenseId: expense.id, // Sinaliza que é modo de edição
+            description: expense.description,
+            totalAmount: expense.total_amount.toString(), // Passar como string
+            expenseDate: expense.date, // String ISO
+            paidByUser: expense.paid_by_user.toString(), // Passar boolean como string
+            userShare: expense.user_share.toString(), // Passar como string
+            // Passar o ID da opção de divisão se o tiver guardado na despesa
+            splitOptionId: expense.split_option_id,
+            friendId: params.friendId, // ID do amigo da tabela 'friends'
+            friendName: params.friendName,
+            categoryIcon: expense.category_icon || undefined,
+        }
+        });
+    };
+
     useEffect(() => {
         console.log("[ExpenseDetail] expense:", expense);
         navigation.setOptions({
@@ -292,7 +312,7 @@ export default function ExpenseDetailScreen() {
                         <Ionicons name="trash-outline" size={24} color={Platform.OS === 'ios' ? '#000' : '#000'} />
                     </TouchableOpacity>
                     <TouchableOpacity
-                        onPress={() => Alert.alert("Editar", `Editar despesa: ${expense?.description}?`)}
+                        onPress={handleEditPress}
                         style={styles.headerIconButton}
                     >
                         <Feather name="edit-2" size={23} color={Platform.OS === 'ios' ? '#000' : '#000'} />
@@ -300,7 +320,7 @@ export default function ExpenseDetailScreen() {
                 </View>
             ),
         });
-    }, [navigation, expense, router]);
+    }, [navigation, expense, router, handleBackPress, confirmAndDeleteExpense, handleEditPress]);
 
 
     if (isLoading || isDeleting || !expense) {

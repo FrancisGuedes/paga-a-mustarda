@@ -36,6 +36,7 @@ import Reanimated, {
     Extrapolation
 } from 'react-native-reanimated';
 import { EXPENSE_DELETED_SIGNAL_KEY } from "./expense/[expenseId]";
+import { EXPENSE_ADDED_OR_MODIFIED_SIGNAL_KEY } from "@/app/add-expense-modal";
 
 // Interface para Despesa
 export interface Expense {
@@ -49,6 +50,7 @@ export interface Expense {
     paid_by_user: boolean; // True se o user_id pagou, false se o friend_id pagou
     created_at?: string;
     updated_at?: string | null;
+    split_option_id?: string; // ID da opção de divisão
     category_icon?: keyof typeof Ionicons.glyphMap;
 }
 
@@ -370,8 +372,12 @@ export default function FriendExpensesScreen() {
                 if (auth.user && !auth.isLoading && routeFriendId && isActive) {
                     //loadExpenses({ forceNetwork: expenses.length === 0 });
                     const deleteSignal = await AsyncStorage.getItem(EXPENSE_DELETED_SIGNAL_KEY);
-                    if (deleteSignal === 'true') {
+                    const updateSignal = await AsyncStorage.getItem(EXPENSE_ADDED_OR_MODIFIED_SIGNAL_KEY);
+
+                    if (deleteSignal === 'true' || updateSignal === 'true') {
                         await AsyncStorage.removeItem(EXPENSE_DELETED_SIGNAL_KEY);
+                        await AsyncStorage.removeItem(EXPENSE_ADDED_OR_MODIFIED_SIGNAL_KEY);
+
                         console.log("[FriendExpensesScreen] Sinal de eliminação encontrado, a forçar recarregamento com skeleton.");
                         // Guarda o número atual de despesas (do cache ou estado anterior) para o skeleton
                         setSkeletonItemCount(expenses.length > 0 ? expenses.length : DEFAULT_SKELETON_COUNT);

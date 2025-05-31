@@ -121,7 +121,7 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="add-friend"
+        name="add-friend-flow"
         options={{
           href: null,
         }}

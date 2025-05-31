@@ -339,7 +339,7 @@ export default function FriendsScreen() {
         {/* Cabeçalho Personalizado (visível durante o skeleton) */}
         <View style={styles.header}>
           <TouchableOpacity style={styles.headerIcon}><Ionicons name="search-outline" size={26} color="#333" /></TouchableOpacity>
-          <Link href="/add-friend" style={styles.addFriendsLinkStyle}><Text style={styles.addFriendsButtonText}>Adicionar amigos</Text></Link>
+          <Link href="/add-friend-flow" style={styles.addFriendsLinkStyle}><Text style={styles.addFriendsButtonText}>Adicionar amigos</Text></Link>
         </View>
         {/* Resumo do Saldo (visível durante o skeleton, com placeholder para o texto) */}
         <View style={styles.summaryContainer}>
@@ -370,7 +370,7 @@ export default function FriendsScreen() {
           <TouchableOpacity style={styles.headerIcon}>
             <Ionicons name="search-outline" size={26} color="#333" />
           </TouchableOpacity>
-          <Link href="/add-friend" asChild>
+          <Link href="/add-friend-flow" asChild>
             <TouchableOpacity>
               <Text style={styles.addFriendsButtonText}>Adicionar amigos</Text>
             </TouchableOpacity>

@@ -1,5 +1,5 @@
 // app/basic-modal.tsx
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
     Stack,
@@ -23,29 +23,41 @@ import {
     View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useAuth } from "../context/AuthContext";
 import { supabase } from "../config/supabase";
+import { useAuth } from "../context/AuthContext";
 
-import type { SplitTypeOption } from "./select-split-type";
 import { SELECTED_EXPENSE_DATE_KEY } from './select-date';
+import { ASYNC_STORAGE_SELECTED_SPLIT_OPTION_KEY, type SplitTypeOption } from "./select-split-type";
+import { BlurView } from 'expo-blur';
 
-const ASYNC_STORAGE_SELECTED_SPLIT_OPTION_KEY = "selected_split_option";
+type AddExpenseModalScreenParams = {
+    friendId?: string;
+    friendName?: string;
+    friendAvatarUrl?: string;
+    // Parâmetros para edição
+    editingExpenseId?: string;
+    description?: string;
+    totalAmount?: string; // Vem como string
+    expenseDate?: string; // Vem como string ISO
+    paidByUser?: string;  // Vem como string ('true' ou 'false')
+    userShare?: string;   // Vem como string
+    categoryIcon?: keyof typeof Ionicons.glyphMap;
+    splitOptionId?: string;
+}
+
+export const EXPENSE_ADDED_OR_MODIFIED_SIGNAL_KEY = 'paga_a_mostarda_expense_added_or_modified_signal';
 
 const formatDateForDisplay = (dateString: string): string => {
     const date = new Date(dateString);
     // Adiciona um dia para corrigir potenciais problemas de fuso horário que fazem a data parecer um dia antes
     const adjustedDate = new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
-    return `${adjustedDate.toLocaleDateString('pt-PT', { day: 'numeric' })} de ${adjustedDate.toLocaleDateString('pt-PT', { month: 'short' }).replace('.','')}`;
+    return `${adjustedDate.toLocaleDateString('pt-PT', { day: 'numeric' })} de ${adjustedDate.toLocaleDateString('pt-PT', { month: 'short' }).replace('.', '')}`;
 };
 
 export default function AddExpenseModalScreen() {
     const router = useRouter();
     const navigation = useNavigation();
-    const params = useLocalSearchParams<{
-        friendId?: string;
-        friendName?: string;
-        currentOptionId?: string;
-    }>();
+    const params = useLocalSearchParams<AddExpenseModalScreenParams>();
     const { auth } = useAuth();
     const insets = useSafeAreaInsets();
 
@@ -65,127 +77,111 @@ export default function AddExpenseModalScreen() {
     const [isSaving, setIsSaving] = useState(false);
     // Novo estado para a data da despesa, inicializado com a data atual no formato YYYY-MM-DD
     const [expenseDate, setExpenseDate] = useState<string>(new Date().toISOString());
-    console.log("[AddExpenseScreen] Data inicial:", new Date().toISOString());
-    console.log("[AddExpenseScreen] Data inicial expenseDate:", expenseDate);
+    const [editingExpenseId, setEditingExpenseId] = useState<string | null>(params.editingExpenseId || null);
+    const [originalExpenseUserShare, setOriginalExpenseUserShare] = useState<number | null>(
+        params.userShare ? parseFloat(params.userShare) : null
+    );
+    //console.log("[AddExpenseScreen] Data inicial:", new Date().toISOString());
+    //console.log("[AddExpenseScreen] Data inicial expenseDate:", expenseDate);
 
-    // Efeito para definir o amigo selecionado APENAS quando os PARÂMETROS DA ROTA mudam
-    useEffect(() => {
-        console.log(
-            "[AddExpenseScreen] useEffect[params]: Params da rota recebidos:",
-            params
-        );
-        const { friendId: pFriendId, friendName: pFriendName } = params;
-
-        if (pFriendId && pFriendName) {
-            // Define ou atualiza o amigo se o ID dos params for diferente do amigo já selecionado
-            if (selectedFriend?.id !== pFriendId) {
-                console.log(
-                    "[AddExpenseScreen] useEffect[params]: Amigo definido/mudou para:",
-                    pFriendName
-                );
-                setSelectedFriend({ id: pFriendId, name: pFriendName });
-                setSelectedSplitOption(null); // Reseta a opção para o novo amigo
-                setIsLoadingSplitOption(true); // Indica que a opção precisa ser (re)carregada
-            }
-        } else if (!pFriendId) {
-            // Se não há friendId nos params (despesa genérica)
-            if (selectedFriend !== null) {
-                // Se havia um amigo selecionado antes, limpa-o
-                console.log(
-                    "[AddExpenseScreen] useEffect[params]: Nenhum amigo nos params, limpando selectedFriend."
-                );
-                setSelectedFriend(null);
-                setSelectedSplitOption(null);
-                setIsLoadingSplitOption(true);
-            } else if (!selectedFriend && !selectedSplitOption) {
-                // Estado inicial para despesa genérica, aciona o carregamento da opção default
-                setIsLoadingSplitOption(true);
-            }
-        }
-    }, [params.friendId, params.friendName]);
-
-    // Função para carregar a opção de divisão
-    const loadSplitOption = useCallback(async () => {
-        // Não executa se já estiver a carregar
-        if (isLoadingSplitOption && selectedSplitOption !== null) {
-            console.log(
-                "[loadSplitOption] Já está a carregar ou já tem opção, a saltar."
-            );
-            return;
-        }
-
-        console.log(
-            "[loadSplitOption] Iniciando. Amigo atual:",
-            selectedFriend?.name
-        );
+    const loadSplitOption = useCallback(async (optionIdFromParams?: string, isEditingMode = false) => {
+        //console.log(`[loadSplitOption] Iniciando. optionIdFromParams: ${optionIdFromParams}, isEditing: ${isEditingMode}`);
         setIsLoadingSplitOption(true);
-        setDisplaySplitText("A carregar opção...");
+        setDisplaySplitText('A carregar opção...');
         let optionToSet: SplitTypeOption | null = null;
 
         try {
-            const storedOptionJson = await AsyncStorage.getItem(
-                ASYNC_STORAGE_SELECTED_SPLIT_OPTION_KEY
-            );
+            const storedOptionJson = await AsyncStorage.getItem(ASYNC_STORAGE_SELECTED_SPLIT_OPTION_KEY);
             if (storedOptionJson) {
                 optionToSet = JSON.parse(storedOptionJson) as SplitTypeOption;
-                console.log(
-                    "[loadSplitOption] Opção carregada do AsyncStorage:",
-                    optionToSet?.description_template
-                );
                 await AsyncStorage.removeItem(ASYNC_STORAGE_SELECTED_SPLIT_OPTION_KEY);
-            } else {
-                console.log(
-                    "[loadSplitOption] Nenhuma opção no cache, buscando default (sort_order = 1) do Supabase..."
-                );
+            } else if (optionIdFromParams && isEditingMode) {
                 const { data, error } = await supabase
-                    .from("expense_split_options")
-                    .select("*")
-                    .eq("sort_order", 1)
+                    .from('expense_split_options')
+                    .select('*')
+                    .eq('id', optionIdFromParams)
+                    .single();
+                if (error) throw error;
+                optionToSet = data as SplitTypeOption;
+                // TODO: fazer replace do placeholder {friendName} na descrição
+                console.log("[loadSplitOption] optionSet", optionToSet);
+                console.log("[loadSplitOption] selectedFriend.name", selectedFriend?.name);
+                const descriptionTemplateUpdated = optionToSet.description_template.replace("{friendIdName}", params.friendName || "amigo");
+                //optionToSet.description_template = descriptionTemplateUpdated;
+                console.log("[loadSplitOption] optionSet.description_template", optionToSet.description_template);
+            } else {
+                const { data, error } = await supabase
+                    .from('expense_split_options')
+                    .select('*')
+                    .eq('sort_order', 1)
                     .maybeSingle();
-
-                if (error && error.code !== "PGRST116") throw error;
-                if (data) {
-                    optionToSet = data as SplitTypeOption;
-                    console.log(
-                        "[loadSplitOption] Opção default carregada do Supabase:",
-                        optionToSet?.description_template
-                    );
-                } else {
-                    console.log("[loadSplitOption] Nenhuma opção default (sort_order=1) encontrada no Supabase.");
-                }
+                if (error && error.code !== 'PGRST116') throw error;
+                if (data) optionToSet = data as SplitTypeOption;
             }
         } catch (error: any) {
-            console.error(
-                "Erro ao carregar opção de divisão em loadSplitOption:",
-                error
-            );
+            console.error("Erro ao carregar opção de divisão:", error);
             Alert.alert("Erro", "Não foi possível carregar as opções de divisão.");
         } finally {
+            console.log("[loadSplitOption] FINALLY optionSet", optionToSet);
             setSelectedSplitOption(optionToSet);
             setIsLoadingSplitOption(false);
         }
     }, []);
 
+    // Efeito para configurar o ecrã com base nos parâmetros da rota (ao montar ou se os params mudarem)
+    useEffect(() => {
+        console.log("[AddExpenseModalScreen] useEffect[params] - Processando Params:", params);
+        const {
+            friendId: pFriendId, friendName: pFriendName, friendAvatarUrl: pFriendAvatarUrl,
+            editingExpenseId: pEditingExpenseId, description: pDescription,
+            totalAmount: pTotalAmount, expenseDate: pExpenseDateParam,
+            userShare: pUserShare, splitOptionId: pSplitOptionId
+        } = params;
+
+        if (pEditingExpenseId) {
+            console.log("[AddExpenseModalScreen] MODO DE EDIÇÃO ID:", pEditingExpenseId);
+            setEditingExpenseId(pEditingExpenseId);
+            setDescription(pDescription || "");
+            setAmount(pTotalAmount || "");
+            setExpenseDate(pExpenseDateParam || new Date().toISOString());
+            if (pUserShare) setOriginalExpenseUserShare(parseFloat(pUserShare));
+            if (pFriendId && pFriendName) {
+                setSelectedFriend({ id: pFriendId, name: pFriendName, avatarUrl: pFriendAvatarUrl });
+            }
+            loadSplitOption(pSplitOptionId, true); // Carrega a opção específica para edição
+        } else {
+            // Modo de adição (com ou sem amigo)
+            setEditingExpenseId(null);
+            setOriginalExpenseUserShare(null);
+            if (pFriendId && pFriendName) {
+                setSelectedFriend({ id: pFriendId, name: pFriendName, avatarUrl: pFriendAvatarUrl });
+            } else {
+                setSelectedFriend(null); // Garante que está limpo para despesa genérica
+            }
+            loadSplitOption(undefined, false); // Carrega a opção default
+        }
+    }, [params.friendId, params.friendName, params.editingExpenseId, params.splitOptionId]);
+
     useFocusEffect(
         useCallback(() => {
-        const loadSelectedDate = async () => {
-            try {
-                const storedDate = await AsyncStorage.getItem(SELECTED_EXPENSE_DATE_KEY);
-                if (storedDate) {
-                    console.log("[AddExpenseScreen] Data carregada do AsyncStorage:", storedDate);
-                    setExpenseDate(storedDate);
-                    // Opcional: Limpar após ler para que não afete a próxima vez que o ecrã for aberto,
-                    // a menos que o utilizador selecione novamente.
-                    await AsyncStorage.removeItem(SELECTED_EXPENSE_DATE_KEY);
-                } else {
-                    console.log("[AddExpenseScreen] Nenhuma data selecionada no AsyncStorage.");
-                    // Mantém a data atual se nada for encontrado (já definido no useState inicial)
+            const loadSelectedDate = async () => {
+                try {
+                    const storedDate = await AsyncStorage.getItem(SELECTED_EXPENSE_DATE_KEY);
+                    if (storedDate) {
+                        console.log("[AddExpenseScreen] Data carregada do AsyncStorage:", storedDate);
+                        setExpenseDate(storedDate);
+                        // Opcional: Limpar após ler para que não afete a próxima vez que o ecrã for aberto,
+                        // a menos que o utilizador selecione novamente.
+                        await AsyncStorage.removeItem(SELECTED_EXPENSE_DATE_KEY);
+                    } else {
+                        console.log("[AddExpenseScreen] Nenhuma data selecionada no AsyncStorage.");
+                        // Mantém a data atual se nada for encontrado (já definido no useState inicial)
+                    }
+                } catch (e) {
+                    console.error("Erro ao ler data selecionada do AsyncStorage:", e);
                 }
-            } catch (e) {
-                console.error("Erro ao ler data selecionada do AsyncStorage:", e);
-            }
-        };
-        loadSelectedDate();
+            };
+            loadSelectedDate();
         }, []) // Executa apenas quando o ecrã ganha foco
     );
 
@@ -213,6 +209,7 @@ export default function AddExpenseModalScreen() {
             console.log("[Focus Listener] GANHOU FOCO (via listener)");
             let dateFromStorage: string | null = null;
             try {
+                // Opção de DIVISÃO
                 const storedOptionJson = await AsyncStorage.getItem(ASYNC_STORAGE_SELECTED_SPLIT_OPTION_KEY);
                 console.log("[Focus Listener] Opção de DIVISÃO carregada do AsyncStorage", storedOptionJson);
                 if (storedOptionJson) {
@@ -221,11 +218,15 @@ export default function AddExpenseModalScreen() {
                     console.log("[Focus Listener] Opção carregada e transformada", storedOption.description_template);
                     setSelectedSplitOption(storedOption);
                     setIsLoadingSplitOption(false); // Se carregou do cache, não está mais a carregar
-                } else if (!selectedSplitOption && !isLoadingSplitOption ) {
+                } else if (!selectedSplitOption && !isLoadingSplitOption) {
                     console.log("[Focus Listener] Não há opção na cache, a carregar default...");
-                    loadSplitOption();
+                    // Se não veio do storage, E não há opção no estado, e não está a carregar,
+                    // aciona o carregamento (default ou de edição, dependendo do estado de editingExpenseId)
+                    loadSplitOption(params.splitOptionId, !!editingExpenseId);
                 }
-                // Carregar data selecionada
+                // Opção DATA - Carregar data selecionada
+                // TODO: talvez seja melhor validar a data 
+                // para carregar como esta a ser feito para a opção de divisão
                 const storedDateISO = await AsyncStorage.getItem(SELECTED_EXPENSE_DATE_KEY);
                 console.log("[Focus Listener] Opção DATA carregada do AsyncStorage", storedOptionJson);
                 if (storedDateISO) {
@@ -244,49 +245,51 @@ export default function AddExpenseModalScreen() {
     }, [navigation, loadSplitOption, selectedSplitOption]);
 
     useEffect(() => {
+        console.log("[AddExpenseModalScreen] Texto de exibição da opção de divisão", selectedSplitOption);
+        console.log("[AddExpenseModalScreen] Esta a carregar texto de exibição da opção de divisão", isLoadingSplitOption);
         if (isLoadingSplitOption) {
             setDisplaySplitText("A carregar opção...");
         } else if (selectedSplitOption) {
-            setDisplaySplitText(
-                selectedSplitOption.description_template.replace(
-                    "{friendName}",
-                    selectedFriend?.name || "amigo"
-                )
-            );
+            setDisplaySplitText(selectedSplitOption.description_template.replace("{friendIdName}", selectedFriend?.name || "amigo"));
         } else {
             setDisplaySplitText("Selecione como foi pago");
         }
-    }, [selectedSplitOption, selectedFriend?.name, isLoadingSplitOption]);
+    }, [selectedSplitOption, selectedFriend?.name, isLoadingSplitOption, selectedSplitOption?.description_template]);
 
     const handleCustomBack = useCallback(() => {
-        // console.log("[handleBackRoute] Navegação atual:", JSON.stringify(navigation.getState(), null, 2));
-        // console.log("[handleCustomBack] Opções de navegação", segments);
-        // console.log("[handleCustomBack] handleCustomBack - Params atuais:", params);
-        if (params.friendId && params.friendName) {
-            console.log(`[handleCustomBack] Tentando voltar para o ecrã do amigo: /friend/${params.friendId}`);
-            // Usar replace pode ser mais robusto para garantir que a pilha de tabs é restaurada corretamente.
-            // Ou router.navigate para tentar manter a pilha se AddExpenseScreen for um modal sobre as tabs.
-            //router.replace({ pathname: `/(tabs)/friend/[friendId]`, params: { friendId: params.friendId, name: params.friendName } });
+        // Ecrã EDITAR: lógica para voltar ao ecrã detalhe da despesa
+        if (params.editingExpenseId && params.friendId && params.friendName) {
+            console.log(
+                `[AddExpenseModalScreen] A voltar para o detalhe da despesa: /friend/expense/${params.editingExpenseId}`
+            );
+            router.replace({
+                pathname: "/(tabs)/friend/expense/[expenseId]",
+                params: {
+                    expenseId: params.editingExpenseId, // O ID da despesa para o ecrã de detalhe
+                    friendId: params.friendId,
+                    friendName: params.friendName,
+                },
+            });
+        // Ecrã ADICIONAR: lógica para voltar ao ecrã lista de despesas do amigo
+        } else if (params.friendId && params.friendName) {
+            //console.log(`[handleCustomBack] Tentando voltar para o ecrã do amigo: /friend/${params.friendId}`);
             router.back();
         } else {
-            console.log("[handleCustomBack] Não pode voltar, a usar replace para a raiz das tabs.");
+            //console.log("[handleCustomBack] Não pode voltar, a usar replace para a raiz das tabs.");
             router.replace('/(tabs)'); // Fallback para a rota inicial das tabs (Amigos)
         }
     }, [router, params.friendId, params.friendName]);
 
     const handleSaveExpense = useCallback(async () => {
-        // ... (lógica de handleSaveExpense) ...
+        console.log("[handleSaveExpense] A iniciar a guardar despesa...");
         if (
             !auth.user?.id ||
-            (!selectedFriend?.id && params.friendId) ||
+            (!selectedFriend?.id && params.friendId && !editingExpenseId) ||
             !description.trim() ||
             !amount.trim() ||
             !selectedSplitOption
         ) {
-            Alert.alert(
-                "Campos em falta",
-                "Verifique todos os campos e a seleção de divisão."
-            );
+            Alert.alert("Campos em falta", "Verifique todos os campos.");
             return;
         }
         const numericAmount = parseFloat(amount.replace(",", "."));
@@ -299,98 +302,129 @@ export default function AddExpenseModalScreen() {
         const splitDivisor = 2;
         switch (selectedSplitOption.split_type) {
             case "EQUALLY":
-                userShare = selectedSplitOption.user_pays_total
-                    ? numericAmount / splitDivisor
-                    : -(numericAmount / splitDivisor);
-                break;
+            userShare = selectedSplitOption.user_pays_total
+                ? numericAmount / splitDivisor
+                : -(numericAmount / splitDivisor);
+            break;
             case "FRIEND_OWES_USER_TOTAL":
-                userShare = numericAmount;
-                break;
+            userShare = numericAmount;
+            break;
             case "USER_OWES_FRIEND_TOTAL":
-                userShare = -numericAmount;
-                break;
+            userShare = -numericAmount;
+            break;
             default:
-                Alert.alert("Erro", "Tipo de divisão inválido.");
-                setIsSaving(false);
-                return;
+            Alert.alert("Erro", "Tipo de divisão inválido.");
+            setIsSaving(false);
+            return;
         }
-
-        console.log("[AddExpense] pick date:", expenseDate, "User Share:", userShare, "Split type:", selectedSplitOption.split_type);
         try {
-            const newExpense = {
+            const expensePayload = {
                 user_id: auth.user.id,
                 friend_id: selectedFriend?.id,
                 description: description.trim(),
                 total_amount: numericAmount,
-                date: expenseDate,
-                updated_at: new Date().toISOString(),
-                paid_by_user: selectedSplitOption.user_pays_total,
                 user_share: userShare,
+                date: expenseDate,
+                paid_by_user: selectedSplitOption.user_pays_total,
+                split_option_id: selectedSplitOption.id,
+                updated_at: new Date().toISOString(),
             };
-            console.log("[AddExpense] A inserir nova despesa");
-            const {data: insertNewExpense, error: insertNewExpenseError} = await supabase
-                .from("expenses")
-                .insert([newExpense])
-                .single()
-                .throwOnError();
-            console.log("[AddExpense] Nova despesa inserida:", insertNewExpense);
-            if (selectedFriend?.id) {
+            console.log("[handleSaveExpense] A guardar despesa com payload:", expensePayload);
+            console.log("[handleSaveExpense] editingExpenseId:", editingExpenseId);
+
+            // EDIÇÃO DE DESPESA
+            if (editingExpenseId) {
+                const v = await supabase
+                    .from("expenses")
+                    .update(expensePayload)
+                    .eq("id", editingExpenseId)
+                    .select()
+                    .throwOnError();
+                console.log("[handleSaveExpense] updated:", v);
+            if (selectedFriend?.id && originalExpenseUserShare !== null) {
                 const { data: friendData, error: friendFetchError } = await supabase
                     .from("friends")
                     .select("balance")
                     .eq("user_id", auth.user.id)
                     .eq("id", selectedFriend.id)
                     .single();
-                console.log("[AddExpense] Dados do amigo:", friendData);
-                
                 if (friendFetchError && friendFetchError.code !== "PGRST116")
-                    throw friendFetchError;
+                throw friendFetchError;
                 const currentFriendBalance = friendData?.balance || 0;
-                console.log("[AddExpense] Balanço do amigo:", currentFriendBalance);
-                const newFriendBalance = currentFriendBalance + userShare;
-                console.log("[AddExpense] Balanço atual do amigo a ser atualizado:", currentFriendBalance);
-                const {data: updateBalance, error: updateBalanceError} = await supabase
+                const newFriendBalance =
+                currentFriendBalance - originalExpenseUserShare + userShare;
+                await supabase
                     .from("friends")
                     .update({
                         balance: newFriendBalance,
                         updated_at: new Date().toISOString(),
                     })
-                    .eq("id", selectedFriend.id)
                     .eq("user_id", auth.user.id)
-                    .select()
+                    .eq("id", selectedFriend.id)
                     .throwOnError();
-                console.log("[AddExpense] Balanço do amigo atualizado:", updateBalance);
             }
-            
-            await AsyncStorage.removeItem(ASYNC_STORAGE_SELECTED_SPLIT_OPTION_KEY);
-            await AsyncStorage.removeItem(SELECTED_EXPENSE_DATE_KEY);
-            setSelectedSplitOption(null);
+            } // NOVA DESPESA
+            else {
+            await supabase
+                .from("expenses")
+                .insert([expensePayload])
+                .single()
+                .throwOnError();
+                if (selectedFriend?.id) {
+                    const { data: friendData, error: friendFetchError } = await supabase
+                        .from("friends")
+                        .select("balance")
+                        .eq("user_id", auth.user.id)
+                        .eq("id", selectedFriend.id)
+                        .single();
+                    if (friendFetchError && friendFetchError.code !== "PGRST116")
+                    throw friendFetchError;
+                    const currentFriendBalance = friendData?.balance || 0;
+                    const newFriendBalance = currentFriendBalance + userShare;
+                    await supabase
+                        .from("friends")
+                        .update({
+                            balance: newFriendBalance,
+                            updated_at: new Date().toISOString(),
+                        })
+                        .eq("user_id", auth.user.id)
+                        .eq("id", selectedFriend.id)
+                        .throwOnError();
+                }
+            }
+            //Alert.alert("Sucesso",editingExpenseId ? "Despesa atualizada!" : "Despesa adicionada!");
+            // Sinaliza que uma despesa foi adicionada/modificada
+            await AsyncStorage.setItem(EXPENSE_ADDED_OR_MODIFIED_SIGNAL_KEY,"true");
+
             setDescription("");
             setAmount("");
-            setExpenseDate(new Date().toISOString().split('T')[0]); // Reset date
-            Alert.alert("Sucesso", "Despesa adicionada!");
-            if (router.canGoBack() && params.friendId && params.friendName) {
-                router.replace({ 
-                    pathname: "/(tabs)/friend/[friendId]", 
-                    params: { friendId: params.friendId, name: params.friendName } 
-                });
-            } else router.replace("/(tabs)");
+            setExpenseDate(new Date().toISOString());
+            setSelectedSplitOption(null);
+            // setEditingExpenseId(null);
+            // setOriginalExpenseUserShare(null);
+            setIsLoadingSplitOption(true);
+
+            handleCustomBack();
         } catch (error: any) {
             console.error("Erro ao guardar despesa:", error);
             Alert.alert("Erro", `Guardar falhou: ${error.message}`);
         } finally {
             setIsSaving(false);
         }
-    }, [
+        }, [
         auth.user,
         selectedFriend,
         description,
         amount,
         selectedSplitOption,
         router,
-        params.friendId,
+        params,
         expenseDate,
+        editingExpenseId,
+        originalExpenseUserShare,
+        handleCustomBack,
     ]);
+    
 
     const canSaveChanges =
         description.trim() !== "" &&
@@ -451,7 +485,7 @@ export default function AddExpenseModalScreen() {
                     options={{ presentation: "modal", title: "Adicionar Despesa" }}
                 />
                 <Text style={styles.infoText}>Com quem partilhou esta despesa?</Text>
-                <Text style={[styles.infoText, {fontSize: 14}]}>Escolha um amigo</Text>
+                <Text style={[styles.infoText, { fontSize: 14 }]}>Escolha um amigo</Text>
                 <View style={{ marginTop: 20 }}>
                     <Button
                         title="Voltar atrás"
@@ -477,118 +511,118 @@ export default function AddExpenseModalScreen() {
     }
 
     return (
-            <View style={[styles.screenContainer]}>
-                <Stack.Screen options={{ 
-                    presentation: "modal",
-                    headerShadowVisible: false,
-                }}/>
-    
-                {selectedFriend && ( 
-                    <View style={styles.friendSelector}>
-                        <Text style={styles.withUserText}>Com:</Text>
-                            {selectedFriend.avatarUrl && selectedFriend.avatarUrl !== 'placeholder' ? (
-                                <Image source={{uri: selectedFriend.avatarUrl}} style={styles.friendAvatar} />
-                            ) : ( <View style={styles.friendAvatarPlaceholder} /> )}
-                        <Text style={styles.friendName}>{selectedFriend.name}</Text>
+        <View style={[styles.screenContainer]}>
+            <Stack.Screen options={{
+                presentation: "modal",
+                headerShadowVisible: false,
+            }} />
+
+            {selectedFriend && (
+                <View style={styles.friendSelector}>
+                    <Text style={styles.withUserText}>Com:</Text>
+                    {selectedFriend.avatarUrl && selectedFriend.avatarUrl !== 'placeholder' ? (
+                        <Image source={{ uri: selectedFriend.avatarUrl }} style={styles.friendAvatar} />
+                    ) : (<View style={styles.friendAvatarPlaceholder} />)}
+                    <Text style={styles.friendName}>{selectedFriend.name}</Text>
+                </View>
+            )}
+
+            <ScrollView
+                contentContainerStyle={styles.scrollContent}
+                keyboardShouldPersistTaps="handled"
+            >
+                <View style={styles.mainContentContainer}>
+                    <View style={styles.inputContainer}>
+                        <Ionicons
+                            name="document-text-outline"
+                            size={24}
+                            color="#888"
+                            style={styles.inputIcon}
+                        />
+                        <TextInput
+                            style={styles.inputDescription}
+                            placeholder="Insira a descrição"
+                            value={description}
+                            onChangeText={setDescription}
+                            placeholderTextColor="#B0B0B0"
+                        />
                     </View>
-                )}
-                
-                <ScrollView
-                    contentContainerStyle={styles.scrollContent}
-                    keyboardShouldPersistTaps="handled"
-                >
-                    <View style={styles.mainContentContainer}>
-                        <View style={styles.inputContainer}>
-                            <Ionicons
-                                name="document-text-outline"
-                                size={24}
-                                color="#888"
-                                style={styles.inputIcon}
-                            />
-                            <TextInput
-                                style={styles.inputDescription}
-                                placeholder="Insira a descrição"
-                                value={description}
-                                onChangeText={setDescription}
-                                placeholderTextColor="#B0B0B0"
-                            />
-                        </View>
-                        <View style={styles.inputContainer}>
-                            <Text style={styles.currencySymbol}>€</Text>
-                            <TextInput
-                                style={styles.inputAmount}
-                                placeholder="0,00"
-                                value={amount}
-                                onChangeText={setAmount}
-                                keyboardType="decimal-pad"
-                                placeholderTextColor="#B0B0B0"
-                            />
-                        </View>
-                        <TouchableOpacity
-                            style={[
-                                styles.splitTypeButton,
-                                !selectedFriend && !!params.friendId && styles.disabledSplitButton,
-                            ]}
-                            onPress={() => {
-                                if (selectedFriend || !params.friendId) {
-                                    router.push({
-                                        pathname: "/select-split-type",
-                                        params: {
-                                            friendName: selectedFriend?.name,
-                                            currentOptionId: selectedSplitOption?.id,
-                                        },
-                                    });
-                                }
-                            }}
-                            disabled={
-                                (!selectedFriend && !!params.friendId) || isLoadingSplitOption
+                    <View style={styles.inputContainer}>
+                        <Text style={styles.currencySymbol}>€</Text>
+                        <TextInput
+                            style={styles.inputAmount}
+                            placeholder="0,00"
+                            value={amount}
+                            onChangeText={setAmount}
+                            keyboardType="decimal-pad"
+                            placeholderTextColor="#B0B0B0"
+                        />
+                    </View>
+                    <TouchableOpacity
+                        style={[
+                            styles.splitTypeButton,
+                            !selectedFriend && !!params.friendId && styles.disabledSplitButton,
+                        ]}
+                        onPress={() => {
+                            if (selectedFriend || !params.friendId) {
+                                router.push({
+                                    pathname: "/select-split-type",
+                                    params: {
+                                        friendName: selectedFriend?.name,
+                                        currentOptionId: selectedSplitOption?.id,
+                                    },
+                                });
                             }
-                        >
-                            <Text style={styles.splitTypeButtonText}>{displaySplitText}</Text>
-                            <Ionicons
-                                name="chevron-forward"
-                                size={20}
-                                color={
-                                    (!selectedFriend && !!params.friendId) || isLoadingSplitOption
-                                        ? "#ccc"
-                                        : "#888"
-                                }
-                            />
-                        </TouchableOpacity>
-                        <View style={styles.bottomControls}>
-                            <View style={styles.leftControls}>
-                                <TouchableOpacity 
-                                        style={styles.controlButton}
-                                        onPress={() => router.push({ 
-                                        pathname: '/select-date', 
-                                        params: { currentDate: expenseDate } // Passa a data atual para o modal
-                                    })}
-                                >
-                                    <Ionicons name="calendar-outline" size={24} color="#555" style={styles.controlIcon} />
-                                    {/* Mostra a data selecionada ou "Hoje" */}
-                                    <Text style={styles.controlButtonText}>
-                                        {
-                                            expenseDate.split('T')[0] === new Date().toISOString().split('T')[0] ? 
+                        }}
+                        disabled={
+                            (!selectedFriend && !!params.friendId) || isLoadingSplitOption
+                        }
+                    >
+                        <Text style={styles.splitTypeButtonText}>{displaySplitText}</Text>
+                        <Ionicons
+                            name="chevron-forward"
+                            size={20}
+                            color={
+                                (!selectedFriend && !!params.friendId) || isLoadingSplitOption
+                                    ? "#ccc"
+                                    : "#888"
+                            }
+                        />
+                    </TouchableOpacity>
+                    <View style={styles.bottomControls}>
+                        <View style={styles.leftControls}>
+                            <TouchableOpacity
+                                style={styles.controlButton}
+                                onPress={() => router.push({
+                                    pathname: '/select-date',
+                                    params: { currentDate: expenseDate } // Passa a data atual para o modal
+                                })}
+                            >
+                                <Ionicons name="calendar-outline" size={24} color="#555" style={styles.controlIcon} />
+                                {/* Mostra a data selecionada ou "Hoje" */}
+                                <Text style={styles.controlButtonText}>
+                                    {
+                                        expenseDate.split('T')[0] === new Date().toISOString().split('T')[0] ?
                                             'Hoje' : formatDateForDisplay(expenseDate)
-                                        }
-                                    </Text>
-                                </TouchableOpacity>
-                                {/* <TouchableOpacity style={styles.controlButton}>
+                                    }
+                                </Text>
+                            </TouchableOpacity>
+                            {/* <TouchableOpacity style={styles.controlButton}>
                                     <MaterialCommunityIcons name="account-group-outline" size={24} color="#555" style={styles.controlIcon} />
                                     <Text style={styles.controlButtonText}>Sem grupo</Text>
                                 </TouchableOpacity> */}
-                            </View>
-                            <TouchableOpacity 
-                                style={styles.controlButton}
-                                onPress={() => Alert.alert("Sem grupo", "Funcionalidade ainda não implementada.")}
-                            >
-                                <Ionicons name="people-outline" size={20} color="#555" style={styles.controlIcon} />
-                                <Text>Sem grupo</Text>
-                            </TouchableOpacity>
                         </View>
+                        <TouchableOpacity
+                            style={styles.controlButton}
+                            onPress={() => Alert.alert("Sem grupo", "Funcionalidade ainda não implementada.")}
+                        >
+                            <Ionicons name="people-outline" size={20} color="#555" style={styles.controlIcon} />
+                            <Text>Sem grupo</Text>
+                        </TouchableOpacity>
                     </View>
-    
-                    {/* <View style={styles.bottomActionsContainer}>
+                </View>
+
+                {/* <View style={styles.bottomActionsContainer}>
                         <View style={styles.leftControls}>
                             <TouchableOpacity style={styles.controlButton}><Ionicons name="calendar-outline" size={24} color="#555" style={styles.controlIcon} /><Text style={styles.controlButtonText}>Hoje</Text></TouchableOpacity>
                             <TouchableOpacity style={styles.controlButton}><MaterialCommunityIcons name="account-group-outline" size={24} color="#555" style={styles.controlIcon} /><Text style={styles.controlButtonText}>Sem grupo</Text></TouchableOpacity>
@@ -598,26 +632,20 @@ export default function AddExpenseModalScreen() {
                             <TouchableOpacity style={[styles.controlButton, {marginLeft: 15}]}><Ionicons name="pencil-outline" size={22} color="#555" /></TouchableOpacity>
                         </View>
                     </View> */}
-    
-                </ScrollView>
-                {isSaving && (
-                    <View style={styles.loadingOverlay}>
-                        <ActivityIndicator size="large" color="#fff" />
-                        <Text style={styles.loadingText}>A guardar...</Text>
-                    </View>
-                )}
-            </View>
-        );
-    }
+
+            </ScrollView>
+        </View>
+    );
+}
 
 const styles = StyleSheet.create({
-    screenContainer: { 
-        flex: 1, 
-        backgroundColor: "#F4F6F8", 
+    screenContainer: {
+        flex: 1,
+        backgroundColor: "#F4F6F8",
     },
-    scrollContent: { 
-        paddingHorizontal: 20, 
-        paddingBottom: 20, 
+    scrollContent: {
+        paddingHorizontal: 20,
+        paddingBottom: 20,
         flexGrow: 1,
     },
     mainContentContainer: {
@@ -637,11 +665,11 @@ const styles = StyleSheet.create({
         paddingVertical: 5,
     },
     friendSelector: { // Estilo para o seletor de amigo no topo
-        flexDirection: 'row', 
-        alignItems: 'center', 
-        paddingVertical: 12, 
-        paddingHorizontal: 20, 
-        backgroundColor: '#fff', 
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 12,
+        paddingHorizontal: 20,
+        backgroundColor: '#fff',
     },
     withUserText: { fontSize: 16, color: "#555", marginRight: 8 },
     friendAvatar: { width: 30, height: 30, borderRadius: 15, marginRight: 8 },

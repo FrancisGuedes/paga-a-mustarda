@@ -1,7 +1,7 @@
 // app/(tabs)/friend/expense/[expenseId].tsx
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Alert, Platform, ActivityIndicator, Button, KeyboardAvoidingView, Animated } from 'react-native';
-import { Stack, useLocalSearchParams, useRouter, useNavigation, router } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter, useNavigation, router, useFocusEffect } from 'expo-router';
 import { Ionicons, Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../../../../config/supabase'; // Ajuste o caminho
@@ -10,6 +10,7 @@ import { EXPENSES_STORAGE_KEY_PREFIX, type Expense } from '../[friendId]'; // Im
 import { capitalizeFirstLetter } from '@/utils/tabsUtils';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FRIENDS_STORAGE_KEY_PREFIX } from '../..';
+import { EXPENSE_ADDED_OR_MODIFIED_SIGNAL_KEY } from '@/app/add-expense-modal';
 
 const DEFAULT_USER_AVATAR = 'https://via.placeholder.com/80/007AFF/FFFFFF?Text=EU';
 const DEFAULT_FRIEND_AVATAR_DETAIL = 'https://via.placeholder.com/80/CEDAEF/000000?Text=';
@@ -109,14 +110,17 @@ export default function ExpenseDetailScreen() {
     // Para o avatar do utilizador logado, pode usar o do auth.user se existir, ou um default
     const userAvatar = DEFAULT_USER_AVATAR; // Supondo que auth.user pode ter photoURL
 
-    const fetchExpenseDetails = useCallback(async () => {
+    const fetchExpenseDetails = useCallback(async (showLoadingIndicator = true) => {
         if (!params.expenseId) {
             setError("ID da despesa em falta.");
             setLoading(false);
             return;
         }
+        if (showLoadingIndicator) {
+            setLoading(true);
+        }
         console.log(`[ExpenseDetail] A buscar detalhes para despesa ID: ${params.expenseId}`);
-        setLoading(true);
+        showLoadingIndicator = true;
         setError(null);
         try {
             const { data, error: supabaseError } = await supabase
@@ -134,9 +138,39 @@ export default function ExpenseDetailScreen() {
             setError(e.message || "Falha ao carregar detalhes da despesa.");
             Alert.alert("Erro", e.message || "Falha ao carregar detalhes da despesa.");
         } finally {
-            setLoading(false);
+            if (showLoadingIndicator || !expense) {
+              // Para de carregar se era o loading inicial ou se não havia despesa
+                setLoading(false);
+            }
         }
     }, [params.expenseId]);
+
+    // Efeito para verificar o sinal de atualização quando o ecrã ganha foco
+    useFocusEffect(
+        useCallback(() => {
+            let isActive = true;
+            const checkUpdateSignal = async () => {
+                try {
+                    const updateSignal = await AsyncStorage.getItem(EXPENSE_ADDED_OR_MODIFIED_SIGNAL_KEY);
+                    if (updateSignal === 'true' && isActive) {
+                        console.log("[ExpenseDetailScreen] Sinal de atualização encontrado. A recarregar detalhes da despesa.");
+                        await AsyncStorage.removeItem(EXPENSE_ADDED_OR_MODIFIED_SIGNAL_KEY);
+                        fetchExpenseDetails(false); // Recarrega os dados, sem mostrar o loading de ecrã inteiro se já temos dados
+                    } else if (isActive && !expense && !isLoading) {
+                        // Se não há sinal, mas não temos despesa e não estamos a carregar, tenta buscar
+                        console.log("[ExpenseDetailScreen] Sem sinal, sem despesa, a tentar buscar detalhes.");
+                        fetchExpenseDetails();
+                    }
+                } catch (e) {
+                    console.error("Erro ao verificar sinal de atualização:", e);
+                }
+            };
+            checkUpdateSignal();
+            return () => { 
+                isActive = false; 
+            };
+        }, [isLoading]) // Adicionado expense e loading para reavaliar
+    );
 
     useEffect(() => {
         fetchExpenseDetails();
@@ -327,7 +361,7 @@ export default function ExpenseDetailScreen() {
         return <SkeletonExpenseDetail />;
     }
     if (error) {
-        return <View style={styles.loadingContainer}><Text style={styles.errorText}>{error}</Text><Button title="Tentar Novamente" onPress={fetchExpenseDetails} /></View>;
+        return <View style={styles.loadingContainer}><Text style={styles.errorText}>{error}</Text><Button title="Tentar Novamente" onPress={() => fetchExpenseDetails(true)} /></View>;
     }
     if (!expense) {
         return <View style={styles.loadingContainer}><Text>Despesa não encontrada.</Text></View>;

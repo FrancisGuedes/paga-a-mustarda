@@ -18,6 +18,7 @@ export interface SplitTypeOption {
 }
 
 const SPLIT_OPTIONS_CACHE_KEY = 'paga_a_mostarda_split_options_cache';
+export const ASYNC_STORAGE_SELECTED_SPLIT_OPTION_KEY = "selected_split_option";
 
 const areOptionsArraysEqual = (arr1: SplitTypeOption[], arr2: SplitTypeOption[]): boolean => {
     if (arr1.length !== arr2.length) return false;
@@ -117,11 +118,12 @@ export default function SelectSplitTypeScreen() {
     );
 
     const handleSelectOption = async (option: SplitTypeOption) => {
+        console.log("[SelectSplitTypeScreen] handleSelectOption - Opção selecionada:", option);
         setSelectedOptionId(option.id);
         console.log("[SelectSplitTypeScreen] Opção selecionada:", option);
         try {
-            await AsyncStorage.setItem('selected_split_option', JSON.stringify(option)); // Para o AddExpenseScreen ler
-            console.log("[SelectSplitTypeScreen] Opção selecionada guardada no AsyncStorage ('selected_split_option').");
+            await AsyncStorage.setItem(ASYNC_STORAGE_SELECTED_SPLIT_OPTION_KEY, JSON.stringify(option)); // Para o AddExpenseScreen ler
+            console.log("[SelectSplitTypeScreen] Opção selecionada guardada no AsyncStorage (ASYNC_STORAGE_SELECTED_SPLIT_OPTION_KEY).");
         if (router.canGoBack()) {
             router.back();
         } else {

@@ -232,7 +232,7 @@ export default function FriendExpensesScreen() {
     const friendAvatar = routeFriendAvatarUrl || `${DEFAULT_FRIEND_AVATAR}${friendFirstName.substring(0, 1)}`;
     const [skeletonItemCount, setSkeletonItemCount] = useState(DEFAULT_SKELETON_COUNT); 
 
-    console.log(`Despesas com ${friendName}:`, expenses);
+    //console.log(`Despesas com ${friendName}:`, expenses);
 
     const getExpensesStorageKey = useCallback(() => {
         if (!auth.user?.id || !routeFriendId) return null;
@@ -340,7 +340,7 @@ export default function FriendExpensesScreen() {
         } finally {
             setLoading(false);
             setIsRefreshing(false);
-            console.log("[loadExpenses finally] Skeleton item count atualizado:", skeletonItemCount);
+            //console.log("[loadExpenses finally] Skeleton item count atualizado:", skeletonItemCount);
         }
     }, [auth.user, routeFriendId, getExpensesStorageKey, expenses.length]
 );

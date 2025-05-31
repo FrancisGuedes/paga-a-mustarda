@@ -1,33 +1,501 @@
-import { View, Text, StyleSheet } from 'react-native';
-import { Stack } from 'expo-router';
+// app/add-friend-flow.tsx
+import React, { useState, useEffect, useCallback } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Platform,
+  Alert,
+  FlatList,
+  TextInput,
+  Image,
+  Linking,
+  ActivityIndicator, // Adicionado para o loading inicial de permissão
+} from "react-native";
+import { Stack, useRouter, useNavigation } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import * as Contacts from "expo-contacts";
+import { supabase } from "../../config/supabase";
+import { useAuth } from "../../context/AuthContext";
 
-export default function AddFriendScreen() {
-  return (
-    <>
-      <Stack.Screen options={{ title: 'Atividade Recente' }} />
-      <View style={styles.container}>
-        <Text style={styles.text}>Ecrã de Adicionar Amigo</Text>
-        <Text style={styles.subtext}>Aqui verá as atividades recentes nos seus grupos e despesas.</Text>
+interface ContactItem extends Contacts.Contact {
+  isSelected?: boolean;
+}
+
+interface FriendContact {
+  id: string;
+  name: string; // Combinação de firstName e lastName
+  firstName?: string;
+  lastName?: string;
+  emails?: Array<{ email: string; label: string; id: string }>;
+  phoneNumbers?: Array<{ number?: string; label: string; id: string }>;
+  imageAvailable?: boolean;
+  image?: { uri: string };
+  isSelected?: boolean;
+}
+
+// DADOS MOCK DE CONTACTOS
+const MOCK_CONTACTS: FriendContact[] = [
+  {
+    id: "mock1",
+    name: "Ana Silva (Mock)",
+    firstName: "Ana",
+    lastName: "Silva",
+    phoneNumbers: [{ id: "p1", label: "mobile", number: "+351912345678" }],
+    imageAvailable: false,
+    isSelected: false,
+  },
+  {
+    id: "mock2",
+    name: "Bruno Costa (Mock)",
+    firstName: "Bruno",
+    lastName: "Costa",
+    emails: [{ id: "e1", label: "work", email: "bruno@example.com" }],
+    imageAvailable: true,
+    image: { uri: "https://via.placeholder.com/40/FFA500/FFFFFF?Text=BC" },
+    isSelected: false,
+  },
+  {
+    id: "mock3",
+    name: "Carlos Dias (Mock)",
+    firstName: "Carlos",
+    lastName: "Dias",
+    phoneNumbers: [{ id: "p2", label: "home", number: "+351212345678" }],
+    imageAvailable: false,
+    isSelected: false,
+  },
+  {
+    id: "mock4",
+    name: "Daniela Pereira (Mock)",
+    firstName: "Daniela",
+    lastName: "Pereira",
+    emails: [{ id: "e2", label: "home", email: "daniela@example.com" }],
+    imageAvailable: true,
+    image: { uri: "https://via.placeholder.com/40/34C759/FFFFFF?Text=DP" },
+    isSelected: false,
+  },
+  {
+    id: "mock5",
+    name: "Zé Ninguém (Mock)",
+    firstName: "Zé Ninguém",
+    lastName: "Pereira",
+    emails: [{ id: "e3", label: "home", email: "ze@example.com" }],
+    imageAvailable: false,
+    phoneNumbers: [{ id: "p3", label: "mobile", number: "+351999999999" }],
+    isSelected: false,
+  },
+];
+
+// Variável para controlar o uso de dados mock (pode ser uma variável de ambiente ou estado)
+const USE_MOCK_CONTACTS = true;
+
+export default function AddFriendFlowScreen() {
+  const router = useRouter();
+  const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
+  const { auth } = useAuth();
+
+  const [contacts, setContacts] = useState<ContactItem[]>([]);
+  const [permissionStatus, setPermissionStatus] =
+    useState<Contacts.PermissionStatus | null>(null);
+  const [loadingInitialPermission, setLoadingInitialPermission] =
+    useState(true); // Para o estado inicial de verificação
+  const [loadingContacts, setLoadingContacts] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
+
+  // Função para pedir permissão e carregar contactos se concedida
+  const triggerPermissionRequestAndLoad = async () => {
+    console.log(
+      "A solicitar permissão de contactos (iniciado pelo utilizador)..."
+    );
+    setLoadingContacts(true); // Indica que estamos a processar o pedido/carregamento
+    const { status } = await Contacts.requestPermissionsAsync(); // Mostra o diálogo do SO
+    console.log("Resultado do pedido de permissão:", status);
+    setPermissionStatus(status);
+    if (status === "granted") {
+      console.log("Permissão concedida, a carregar contactos...");
+      await loadContactsInternal(); // Carrega os contactos
+    } else {
+      console.log("Permissão negada ou não concedida.");
+      // Opcional: Mostrar um alerta se foi negado explicitamente após o pedido
+      if (status === "denied") {
+        Alert.alert(
+          "Permissão Negada",
+          "Não podemos aceder aos seus contactos sem a sua permissão. Pode alterar isto nas definições da aplicação.",
+          [
+            { text: "Ok" },
+            { text: "Abrir Definições", onPress: () => Linking.openSettings() },
+          ]
+        );
+      }
+      setLoadingContacts(false);
+    }
+  };
+
+  // Função interna para carregar contactos (assume que a permissão foi concedida)
+  const loadContactsInternal = async () => {
+    console.log("A carregar contactos (interno)...");
+    // setLoadingContacts(true) já deve ter sido chamado por quem chama esta função
+    try {
+      const { data } = await Contacts.getContactsAsync({
+        fields: [
+          Contacts.Fields.FirstName,
+          Contacts.Fields.LastName,
+          Contacts.Fields.PhoneNumbers,
+          Contacts.Fields.Emails,
+          Contacts.Fields.ImageAvailable,
+          Contacts.Fields.Image,
+        ],
+      });
+      if (data.length > 0) {
+        const formattedContacts = data
+          .filter(
+            (contact) =>
+              contact.firstName ||
+              contact.lastName ||
+              (contact.emails && contact.emails.length > 0) ||
+              (contact.phoneNumbers && contact.phoneNumbers.length > 0)
+          )
+          .map((contact) => ({ ...contact, isSelected: false }))
+          .sort((a, b) =>
+            (a.firstName || a.name || "").localeCompare(
+              b.firstName || b.name || ""
+            )
+          );
+        setContacts(formattedContacts);
+      }
+    } catch (error) {
+      console.error("Erro ao carregar contactos:", error);
+      Alert.alert("Erro", "Não foi possível carregar os seus contactos.");
+    } finally {
+      setLoadingContacts(false);
+    }
+  };
+
+  // Verifica a permissão apenas ao montar
+  useEffect(() => {
+    const checkInitialPermission = async () => {
+      setLoadingInitialPermission(true);
+      const { status: currentStatus } = await Contacts.getPermissionsAsync();
+      console.log("Status inicial da permissão de contactos:", currentStatus);
+      setPermissionStatus(currentStatus);
+
+      if (currentStatus === "granted") {
+        setLoadingContacts(true); // Prepara para carregar contactos
+        await loadContactsInternal();
+      }
+      // Se 'undetermined' ou 'denied', não faz nada automaticamente.
+      // A UI renderizada por renderContent() tratará de mostrar os botões corretos.
+      setLoadingInitialPermission(false);
+    };
+    checkInitialPermission();
+  }, []);
+
+  const handleNext = async () => {
+    /* ... */
+  };
+  useEffect(() => {
+    navigation.setOptions({
+      presentation: "modal",
+      headerShown: true,
+      title: "Adicionar amigos",
+      headerTitleAlign: "center",
+      headerLeft: () => (
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.headerButton}
+        >
+          <Text style={styles.headerButtonText}>Cancelar</Text>
+        </TouchableOpacity>
+      ),
+      headerRight: () => (
+        <TouchableOpacity
+          onPress={handleNext}
+          style={styles.headerButton}
+          disabled={selectedContacts.length === 0}
+        >
+          <Text
+            style={[
+              styles.headerButtonText,
+              styles.headerButtonNext,
+              selectedContacts.length === 0 && styles.headerButtonDisabled,
+            ]}
+          >
+            Próximo
+          </Text>
+        </TouchableOpacity>
+      ),
+      headerStyle: styles.headerStyle,
+    });
+  }, [navigation, router, selectedContacts.length]);
+  const toggleContactSelection = (contactId: string) => {
+    /* ... */
+  };
+  const filteredContacts = contacts.filter((contact) => {
+    const fullName = `${contact.firstName || ""} ${
+      contact.lastName || ""
+    }`.toLowerCase();
+    return fullName.includes(searchQuery.toLowerCase());
+  });
+  const renderContactItem = ({ item }: { item: ContactItem }) => {
+    return (
+      <TouchableOpacity
+        onPress={() => toggleContactSelection(item.id!)}
+        style={styles.contactItem}
+      >
+        <View style={styles.contactInfo}>
+          {item.imageAvailable && item.image ? (
+            <Image
+              source={{ uri: item.image.uri }}
+              style={styles.contactAvatar}
+            />
+          ) : (
+            <View style={styles.contactAvatarPlaceholder}>
+              <Text style={styles.contactAvatarText}>
+                {(item.firstName || " ")[0].toUpperCase()}
+                {(item.lastName || " ")[0].toUpperCase()}
+              </Text>
+            </View>
+          )}
+          <Text style={styles.contactName}>
+            {`${item.firstName || ""} ${item.lastName || ""}`.trim()}
+          </Text>
+        </View>
+        <View
+          style={[styles.checkbox, item.isSelected && styles.checkboxSelected]}
+        >
+          {item.isSelected && (
+            <Ionicons name="checkmark" size={16} color="#fff" />
+          )}
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  const renderContent = () => {
+    if (loadingInitialPermission) {
+      return (
+        <View style={styles.centeredMessageContainer}>
+          <ActivityIndicator size="large" />
+        </View>
+      );
+    }
+
+    if (permissionStatus === "denied" || permissionStatus === "undetermined") {
+      return (
+        <View style={styles.centeredMessageContainer}>
+          <Image
+            source={require("../../assets/images/cat-icon.png")}
+            style={styles.placeholderImage}
+          />
+          <Text style={styles.permissionMessage}>
+            O Paga a Mustarda pode ajudá-lo a convidar novos amigos. Para o permitir,
+            toque em "Permitir Acesso" ou vá a Definições e ative os Contactos.
+          </Text>
+          <TouchableOpacity
+            style={styles.settingsButton}
+            onPress={triggerPermissionRequestAndLoad}
+          >
+            <Text style={styles.settingsButtonText}>Permitir Acesso</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.settingsButton,
+              { marginTop: 10, backgroundColor: "#6c757d" },
+            ]}
+            onPress={() => Linking.openSettings()}
+          >
+            <Text style={styles.settingsButtonText}>Abrir Definições</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    if (permissionStatus === "granted") {
+      if (loadingContacts) {
+        return (
+          <View style={styles.centeredMessageContainer}>
+            <ActivityIndicator size="large" />
+            <Text style={{ marginTop: 10 }}>A carregar contactos...</Text>
+          </View>
+        );
+      }
+      return (
+        <>
+          <Text style={styles.contactsHeader}>Dos seus contactos</Text>
+          <FlatList
+            data={filteredContacts}
+            renderItem={renderContactItem}
+            keyExtractor={(item) => item.id!}
+            ListEmptyComponent={
+              <Text style={styles.noContactsText}>
+                Nenhum contacto encontrado ou correspondente à pesquisa.
+              </Text>
+            }
+          />
+        </>
+      );
+    }
+
+    return (
+      <View style={styles.centeredMessageContainer}>
+        <Text style={styles.permissionMessage}>
+          Não foi possível obter o estado da permissão de contactos.
+        </Text>
       </View>
-    </>
+    );
+  };
+
+  return (
+    <View style={[styles.screenContainer, { paddingTop: insets.top }]}>
+      <View style={styles.searchAndAddContainer}>
+        <View style={styles.searchBarContainer}>
+          <Ionicons
+            name="search"
+            size={20}
+            color="#8E8E93"
+            style={styles.searchIcon}
+          />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Pesquisar nos contactos"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholderTextColor="#8E8E93"
+            editable={permissionStatus === "granted" && !loadingContacts}
+          />
+        </View>
+        <TouchableOpacity
+          style={styles.addNewContactButton}
+          onPress={() =>
+            Alert.alert("Adicionar Novo", "Funcionalidade a implementar")
+          }
+        >
+          <Ionicons
+            name="person-add-outline"
+            size={24}
+            color="#007AFF"
+            style={styles.addNewContactIcon}
+          />
+          <Text style={styles.addNewContactText}>
+            Adicionar um novo contacto ao Splitwise
+          </Text>
+        </TouchableOpacity>
+      </View>
+      {renderContent()}
+    </View>
   );
 }
 
+// ... (styles como antes)
 const styles = StyleSheet.create({
-  container: {
+  screenContainer: { flex: 1, backgroundColor: "#fff" },
+  loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
+  headerButton: { paddingHorizontal: 10, paddingVertical: 5 },
+  headerButtonText: { color: "#007AFF", fontSize: 17 },
+  headerButtonNext: { fontWeight: "600" },
+  headerButtonDisabled: { color: "#BDBDBD" },
+  headerStyle: {
+    backgroundColor: Platform.OS === "ios" ? "#F7F7F7" : "#FFFFFF",
+  },
+  searchAndAddContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#D1D1D6",
+  },
+  searchBarContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F0F0F0",
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    height: 40,
+  },
+  searchIcon: { marginRight: 8 },
+  searchInput: { flex: 1, fontSize: 17, color: "#000" },
+  addNewContactButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 15,
+  },
+  addNewContactIcon: { marginRight: 12 },
+  addNewContactText: { fontSize: 17, color: "#007AFF", fontWeight: "500" },
+  centeredMessageContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     padding: 20,
   },
-  text: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    marginBottom: 10,
+  placeholderImage: {
+    width: 100,
+    height: 100,
+    resizeMode: "contain",
+    marginBottom: 20,
   },
-  subtext: {
+  permissionMessage: {
     fontSize: 16,
-    textAlign: 'center',
-    color: 'gray',
+    textAlign: "center",
+    color: "#666",
+    marginBottom: 20,
+    lineHeight: 22,
+  },
+  settingsButton: {
+    backgroundColor: "#007AFF",
+    paddingVertical: 12,
+    paddingHorizontal: 30,
+    borderRadius: 8,
+  },
+  settingsButtonText: { color: "#fff", fontSize: 17, fontWeight: "500" },
+  contactsHeader: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#8E8E93",
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 8,
+    backgroundColor: "#F7F7F7",
+  },
+  contactItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#E0E0E0",
+  },
+  contactInfo: { flexDirection: "row", alignItems: "center", flex: 1 },
+  contactAvatar: { width: 40, height: 40, borderRadius: 20, marginRight: 12 },
+  contactAvatarPlaceholder: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 12,
+    backgroundColor: "#E0E0E0",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  contactAvatarText: { color: "#fff", fontSize: 16, fontWeight: "500" },
+  contactName: { fontSize: 17, color: "#000" },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    borderColor: "#C7C7CC",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  checkboxSelected: { backgroundColor: "#007AFF", borderColor: "#007AFF" },
+  noContactsText: {
+    textAlign: "center",
+    marginTop: 30,
+    fontSize: 16,
+    color: "gray",
   },
 });

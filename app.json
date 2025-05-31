@@ -10,7 +10,10 @@
     "newArchEnabled": true,
     "ios": {
       "bundleIdentifier": "com.francisEnterPrises.pagaamustarda",
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSContactsUsageDescription": "A nossa aplicação precisa de aceder aos seus contactos para o ajudar a encontrar e adicionar amigos facilmente."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -18,8 +21,10 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.francisEnterPrises.pagaamustarda"
-      
+      "package": "com.francisEnterPrises.pagaamustarda",
+      "permissions": [
+        "android.permission.READ_CONTACTS"
+      ]
     },
     "web": {
       "bundler": "metro",

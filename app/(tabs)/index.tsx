@@ -32,6 +32,9 @@ interface Friend {
   balance: number;
   created_at?: string | null;
   updated_at?: string | null;
+  phone_number?: string | null;
+  email?: string | null;
+  is_settled?: boolean; 
 }
 
 export const FRIENDS_STORAGE_KEY_PREFIX = 'paga_a_mostarda_friends_cache_';
@@ -129,10 +132,16 @@ export default function FriendsScreen() {
   const fetchFriends = async (userId: string) => {
     console.log(`[fetchFriends] A buscar amigos para o user ID: ${userId}`);
     try {
-      const { data, error: supabaseError, status, statusText } = await supabase
-        .from('friends')
-        .select('*')
-        .eq('user_id', userId);
+      const {
+        data,
+        error: supabaseError,
+        status,
+        statusText,
+      } = await supabase
+        .from("friends")
+        .select("*")
+        .eq("user_id", userId)
+        .order("balance", { ascending: false });
 
       //console.log(`[fetchFriends] Resposta Supabase - Status: ${status}, StatusText: ${statusText}, Erro:`, supabaseError, "Dados:", data);
 
@@ -270,7 +279,7 @@ export default function FriendsScreen() {
     const friendOwesMe = item.balance > 0;
     const absoluteBalance = Math.abs(item.balance).toFixed(2);
 
-    let balanceDescription = 'contas acertadas';
+    let balanceDescription = item.is_settled ? 'contas acertadas' : 'sem despesas';
     let balanceColorStyle = styles.settledColor;
 
     if (friendOwesMe) {
@@ -358,12 +367,23 @@ export default function FriendsScreen() {
   }
 
   return (
-    <View style={{ flex: 1, paddingTop: insets.top, backgroundColor: styles.screenContainer.backgroundColor }}>
+    <View
+      style={{
+        flex: 1,
+        paddingTop: insets.top,
+        backgroundColor: styles.screenContainer.backgroundColor,
+      }}
+    >
       <ScrollView
         style={styles.scrollViewStyle}
         contentContainerStyle={styles.scrollContentContainer}
         refreshControl={
-          <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} colors={["#007AFF"]} tintColor={"#007AFF"}/>
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={onRefresh}
+            colors={["#007AFF"]}
+            tintColor={"#007AFF"}
+          />
         }
       >
         <View style={styles.header}>
@@ -380,34 +400,56 @@ export default function FriendsScreen() {
         <View style={styles.summaryContainer}>
           <Text style={styles.summaryText}>{netBalanceText}</Text>
           <TouchableOpacity style={styles.filterIcon}>
-              <MaterialCommunityIcons name="filter-variant" size={24} color="#555" />
+            <MaterialCommunityIcons
+              name="filter-variant"
+              size={24}
+              color="#555"
+            />
           </TouchableOpacity>
         </View>
 
         {/* Background loading indicator (shown if `isRefreshing` is true but `initialLoading` is false) */}
         {isRefreshing && !initialLoading && (
-            <View style={styles.backgroundLoadingContainer}>
-                <ActivityIndicator size="small" color="#007AFF" />
-                <Text style={styles.backgroundLoadingText}>A atualizar...</Text>
-            </View>
+          <View style={styles.backgroundLoadingContainer}>
+            <ActivityIndicator size="small" color="#007AFF" />
+            <Text style={styles.backgroundLoadingText}>A atualizar...</Text>
+          </View>
         )}
 
         <FlatList
-          data={friendsWithPendingBalance}
+          data={friends}
           renderItem={renderFriendItem}
-          keyExtractor={item => item.id.toString()}
+          keyExtractor={(item) => item.id.toString()}
           ListEmptyComponent={
             <View style={styles.emptyListContainer}>
               <Text style={styles.emptyListText}>
-                {error ? `Erro: ${error}` : 'Nenhum amigo com saldo pendente.'}
+                {error ? `Erro: ${error}` : "Nenhum amigo com saldo pendente."}
               </Text>
-              {error && <Button title="Tentar Novamente" onPress={() => loadFriends({ forceNetwork: true, isPullToRefresh: true  })} />}
+              {error && (
+                <Button
+                  title="Tentar Novamente"
+                  onPress={() =>
+                    loadFriends({ forceNetwork: true, isPullToRefresh: true })
+                  }
+                />
+              )}
             </View>
           }
           scrollEnabled={false}
         />
 
-        <View style={styles.settledOptionsOuterContainer}>
+        {/* // TODO: Componente para mostrar amigos com contas liquidadas
+          para isso é necessario ter estados na tabela amigos
+          e.g. isSettled: boolean -> DONE
+          Se estiver, deve ser ocultado
+          Se não tiver, deve ser mostrado
+
+          para ficar funcional, é necessario adicionar o friendsWithPendingBalance ao
+          FlatList onde rendeFriendItem:
+            - data={friendsWithPendingBalance}
+
+        */}
+        {/* <View style={styles.settledOptionsOuterContainer}>
           <View style={styles.settledOptionsInnerContainer}>
             <Text style={styles.settledInfoText}>
               Ocultar amigos com quem tem as contas acertadas há mais de 7 dias
@@ -420,7 +462,7 @@ export default function FriendsScreen() {
               </TouchableOpacity>
             )}
           </View>
-        </View>
+        </View> */}
       </ScrollView>
     </View>
   );

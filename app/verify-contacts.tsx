@@ -22,167 +22,166 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { supabase } from "../config/supabase"; // Ajuste o caminho
 import { useAuth } from "../context/AuthContext"; // Ajuste o caminho
 import AsyncStorage from "@react-native-async-storage/async-storage";
-    // Reutiliza a interface ContactItem de AddFriendFlowScreen
-    // Idealmente, esta interface estaria num ficheiro de tipos partilhado
-    interface ContactItem {
-        id: string;
-        name: string;
-        firstName?: string;
-        lastName?: string;
-        email: string;
-        phoneNumbers?: Array<{ number?: string; label: string; id: string }>;
-        imageAvailable?: boolean;
-        image?: { uri: string };
-    // Não precisa de isSelected aqui
-    }
+// Reutiliza a interface ContactItem de AddFriendFlowScreen
+// Idealmente, esta interface estaria num ficheiro de tipos partilhado
+interface ContactItem {
+    id: string;
+    name: string;
+    firstName?: string;
+    lastName?: string;
+    email: string;
+    phoneNumbers?: Array<{ number?: string; label: string; id: string }>;
+    imageAvailable?: boolean;
+    image?: { uri: string };
+}
 
-    const FRIENDS_STORAGE_KEY_PREFIX = "paga_a_mostarda_friends_data_v2_";
-    // Nova chave para comunicar a lista atualizada após remoções
-    export const VERIFIED_CONTACTS_AFTER_REMOVAL_KEY = "paga_a_mostarda_verified_contacts_after_removal";
+const FRIENDS_STORAGE_KEY_PREFIX = "paga_a_mostarda_friends_data_v2_";
+// Nova chave para comunicar a lista atualizada após remoções
+export const VERIFIED_CONTACTS_AFTER_REMOVAL_KEY = "paga_a_mostarda_verified_contacts_after_removal";
 
 
-    export default function VerifyContactsScreen() {
-    const router = useRouter();
-    const navigation = useNavigation();
-    const params = useLocalSearchParams<{ selectedContacts?: string }>();
-    const { auth } = useAuth();
-    const insets = useSafeAreaInsets();
+export default function VerifyContactsScreen() {
+const router = useRouter();
+const navigation = useNavigation();
+const params = useLocalSearchParams<{ selectedContacts?: string }>();
+const { auth } = useAuth();
+const insets = useSafeAreaInsets();
 
-    const [contactsToVerify, setContactsToVerify] = useState<ContactItem[]>([]);
+const [contactsToVerify, setContactsToVerify] = useState<ContactItem[]>([]);
 
-    useEffect(() => {
-      // Limpa o sinal de atualização ao entrar, para não ser lido desnecessariamente pelo AddFriendFlowScreen
-        AsyncStorage.removeItem(VERIFIED_CONTACTS_AFTER_REMOVAL_KEY);
+useEffect(() => {
+    // Limpa o sinal de atualização ao entrar, para não ser lido desnecessariamente pelo AddFriendFlowScreen
+    AsyncStorage.removeItem(VERIFIED_CONTACTS_AFTER_REMOVAL_KEY);
 
-        if (params.selectedContacts) {
-            try {
-                const parsedContacts = JSON.parse(params.selectedContacts) as ContactItem[];
-                setContactsToVerify(parsedContacts);
-                if (parsedContacts.length === 0) {
-                    Alert.alert("Nenhum contacto", "Não há contactos para verificar.", 
-                        [{ text: "OK", onPress: () => router.back() },]
-                    );
-                }
-            } catch (e) {
-                Alert.alert("Erro", "Não foi possível carregar os contactos.", [
-                    { text: "OK", onPress: () => router.back() },
-                ]);
+    if (params.selectedContacts) {
+        try {
+            const parsedContacts = JSON.parse(params.selectedContacts) as ContactItem[];
+            setContactsToVerify(parsedContacts);
+            if (parsedContacts.length === 0) {
+                Alert.alert("Nenhum contacto", "Não há contactos para verificar.", 
+                    [{ text: "OK", onPress: () => router.back() },]
+                );
             }
-        } else if (contactsToVerify.length === 0) {
-            Alert.alert("Nenhum contacto", "Não há contactos para verificar.", [
-            { text: "OK", onPress: () => router.back() },
+        } catch (e) {
+            Alert.alert("Erro", "Não foi possível carregar os contactos.", [
+                { text: "OK", onPress: () => router.back() },
             ]);
         }
-    }, [params.selectedContacts]);
+    } else if (contactsToVerify.length === 0) {
+        Alert.alert("Nenhum contacto", "Não há contactos para verificar.", [
+        { text: "OK", onPress: () => router.back() },
+        ]);
+    }
+}, [params.selectedContacts]);
 
-    const handleConclude = useCallback(async () => {
-        if (!auth.user?.id || contactsToVerify.length === 0) {
-            Alert.alert(
-            "Erro",
-            "Nenhum contacto para adicionar ou utilizador não autenticado."
-            );
-            return;
-        }
-        const friendsToAdd = contactsToVerify.map((contact) => ({
-            user_id: auth.user!.id,
-            name: contact.name,
-            phone_number: contact.phoneNumbers?.[0]?.number || null,
-            email: contact.email || null,
-            balance: 0,
-            created_at: new Date().toISOString(),
-        }));
-        try {
-            const { error } = await supabase
-                .from("friends").insert(friendsToAdd);
-            if (error) throw error;
-            Alert.alert("Sucesso!",`${friendsToAdd.length} amigo(s) adicionado(s).`);
-            const friendsListCacheKey = `${FRIENDS_STORAGE_KEY_PREFIX}${auth.user.id}`;
-            await AsyncStorage.removeItem(friendsListCacheKey);
-            router.replace("/(tabs)");
-        } catch (error: any) {
-            Alert.alert("Erro", `Não foi possível adicionar: ${error.message}`);
-        }
-    }, [auth.user, contactsToVerify, router]);
-
-
-    const handleRemoveContact = (contactIdToRemove: string) => {
+const handleConclude = useCallback(async () => {
+    if (!auth.user?.id || contactsToVerify.length === 0) {
         Alert.alert(
-            "Remover Contacto",
-            "É para remover esta pessoa da lista de adição?",
-            [
-                { text: "Cancelar", style: "cancel" },
-                {
-                    text: "Remover",
-                    style: "destructive",
-                    onPress: async () => {
-                        const updatedContacts = contactsToVerify.filter((contact) => contact.id !== contactIdToRemove);
-                        setContactsToVerify(updatedContacts);
-                        try {
-                            await AsyncStorage.setItem(VERIFIED_CONTACTS_AFTER_REMOVAL_KEY, JSON.stringify(updatedContacts));
-                            console.log("[VerifyContactsScreen] Lista atualizada guardada no AsyncStorage após remoção.");
-                        } catch (e) {
-                            console.error( "Erro ao guardar lista atualizada no AsyncStorage:",e);
-                        }
-                        // Se a lista ficar vazia após remover, volta para o ecrã anterior
-                        if (updatedContacts.length === 0) {
-                            Alert.alert("Lista Vazia", "Todos os contactos foram removidos da lista de verificação.");
-                            router.replace("/add-friend-flow");
-                        }
-                    },
-                },
-            ]
+        "Erro",
+        "Nenhum contacto para adicionar ou utilizador não autenticado."
         );
-    };
+        return;
+    }
+    const friendsToAdd = contactsToVerify.map((contact) => ({
+        user_id: auth.user!.id,
+        name: contact.name,
+        phone_number: contact.phoneNumbers?.[0]?.number || null,
+        email: contact.email || null,
+        balance: 0,
+        created_at: new Date().toISOString(),
+    }));
+    try {
+        const { error } = await supabase
+            .from("friends").insert(friendsToAdd);
+        if (error) throw error;
+        Alert.alert("Sucesso!",`${friendsToAdd.length} amigo(s) adicionado(s).`);
+        const friendsListCacheKey = `${FRIENDS_STORAGE_KEY_PREFIX}${auth.user.id}`;
+        await AsyncStorage.removeItem(friendsListCacheKey);
+        router.replace("/(tabs)");
+    } catch (error: any) {
+        Alert.alert("Erro", `Não foi possível adicionar: ${error.message}`);
+    }
+}, [auth.user, contactsToVerify, router]);
 
-    useEffect(() => {
-        navigation.setOptions({
-            presentation: "modal",
-            headerShown: true,
-            title: "Verificar informações",
-            headerTitleAlign: "center",
-            headerLeft: () => (
-                <TouchableOpacity
-                    onPress={() => router.back()}
-                    style={styles.headerNavButton}
+
+const handleRemoveContact = (contactIdToRemove: string) => {
+    Alert.alert(
+        "Remover Contacto",
+        "É para remover esta pessoa da lista de adição?",
+        [
+            { text: "Cancelar", style: "cancel" },
+            {
+                text: "Remover",
+                style: "destructive",
+                onPress: async () => {
+                    const updatedContacts = contactsToVerify.filter((contact) => contact.id !== contactIdToRemove);
+                    setContactsToVerify(updatedContacts);
+                    try {
+                        await AsyncStorage.setItem(VERIFIED_CONTACTS_AFTER_REMOVAL_KEY, JSON.stringify(updatedContacts));
+                        console.log("[VerifyContactsScreen] Lista atualizada guardada no AsyncStorage após remoção.");
+                    } catch (e) {
+                        console.error( "Erro ao guardar lista atualizada no AsyncStorage:",e);
+                    }
+                    // Se a lista ficar vazia após remover, volta para o ecrã anterior
+                    if (updatedContacts.length === 0) {
+                        Alert.alert("Lista Vazia", "Todos os contactos foram removidos da lista de verificação.");
+                        router.replace("/add-friend-flow");
+                    }
+                },
+            },
+        ]
+    );
+};
+
+useEffect(() => {
+    navigation.setOptions({
+        presentation: "modal",
+        headerShown: true,
+        title: "Verificar informações",
+        headerTitleAlign: "center",
+        headerLeft: () => (
+            <TouchableOpacity
+                onPress={() => router.back()}
+                style={styles.headerNavButton}
+            >
+                <Ionicons
+                name="chevron-back"
+                size={28}
+                color={Platform.OS === "ios" ? "#007AFF" : "#000"}
+                />
+            </TouchableOpacity>
+        ),
+        headerRight: () => (
+            <TouchableOpacity
+                onPress={handleConclude}
+                style={styles.headerNavButton}
+                disabled={contactsToVerify.length === 0}
+            >
+                <Text
+                style={[
+                    styles.headerButtonTextConclude,
+                    contactsToVerify.length === 0 && styles.headerButtonDisabled,
+                ]}
                 >
-                    <Ionicons
-                    name="chevron-back"
-                    size={28}
-                    color={Platform.OS === "ios" ? "#007AFF" : "#000"}
-                    />
-                </TouchableOpacity>
-            ),
-            headerRight: () => (
-                <TouchableOpacity
-                    onPress={handleConclude}
-                    style={styles.headerNavButton}
-                    disabled={contactsToVerify.length === 0}
-                >
-                    <Text
-                    style={[
-                        styles.headerButtonTextConclude,
-                        contactsToVerify.length === 0 && styles.headerButtonDisabled,
-                    ]}
-                    >
-                        Concluir
-                    </Text>
-                </TouchableOpacity>
-            ),
-            headerStyle: styles.headerStyle,
-        });
-    }, [navigation, router, handleConclude, contactsToVerify.length]);
+                    Concluir
+                </Text>
+            </TouchableOpacity>
+        ),
+        headerStyle: styles.headerStyle,
+    });
+}, [navigation, router, handleConclude, contactsToVerify.length]);
 
-    const renderVerifyItem = ({ item }: { item: ContactItem }) => {
-        const displayInfo =
-            item.phoneNumbers?.[0]?.number ||
-            item.email ||
-            "Sem informação de contacto";
-        const avatarText = (item.firstName ||
-            item.name.split(" ")[0] ||
-            " ")[0].toUpperCase();
+const renderVerifyItem = ({ item }: { item: ContactItem }) => {
+    const displayInfo =
+        item.phoneNumbers?.[0]?.number ||
+        item.email ||
+        "Sem informação de contacto";
+    const avatarText = (item.firstName ||
+        item.name.split(" ")[0] ||
+        " ")[0].toUpperCase();
 
-        return (
-            <View style={styles.verifyItemContainer}>
+    return (
+        <View style={styles.verifyItemContainer}>
             <View style={styles.verifyAvatarContainer}>
                 {item.imageAvailable && item.image ? (
                 <Image
@@ -220,7 +219,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
             >
                 <Text style={styles.editText}>Editar</Text>
             </TouchableOpacity>
-            </View>
+        </View>
         );
     };
 
@@ -251,9 +250,9 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
         />
         </View>
     );
-    }
+}
 
-    const styles = StyleSheet.create({
+const styles = StyleSheet.create({
     screenContainer: {
         flex: 1,
         backgroundColor: "#FFFFFF",

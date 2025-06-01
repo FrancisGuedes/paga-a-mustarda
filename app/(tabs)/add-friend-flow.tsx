@@ -30,7 +30,7 @@ interface ContactItem extends Contacts.Contact {
 
 interface FriendContact {
   id: string;
-  name: string; // Combinação de firstName e lastName
+  name: string;
   firstName?: string;
   lastName?: string;
   email?: string;

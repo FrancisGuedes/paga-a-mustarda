@@ -47,7 +47,7 @@ const MOCK_CONTACTS: FriendContact[] = [
     name: "Ana Silva (Mock)",
     firstName: "Ana",
     lastName: "Silva",
-    email: "ana.silva@example.com",
+    email: "franciscojmguedes@gmail.com",
     phoneNumbers: [{ id: "p1", label: "mobile", number: "+351912345678" }],
     imageAvailable: false,
     isSelected: false,

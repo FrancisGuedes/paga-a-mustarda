@@ -21,6 +21,8 @@ import * as Contacts from "expo-contacts";
 import { supabase } from "../../config/supabase";
 import { useAuth } from "../../context/AuthContext";
 import { transcode } from "buffer";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { VERIFIED_CONTACTS_AFTER_REMOVAL_KEY } from "../verify-contacts";
 
 interface ContactItem extends Contacts.Contact {
   isSelected?: boolean;
@@ -31,7 +33,7 @@ interface FriendContact {
   name: string; // Combinação de firstName e lastName
   firstName?: string;
   lastName?: string;
-  emails?: Array<{ email: string; label: string; id: string }>;
+  email?: string;
   phoneNumbers?: Array<{ number?: string; label: string; id: string }>;
   imageAvailable?: boolean;
   image?: { uri: string };
@@ -45,6 +47,7 @@ const MOCK_CONTACTS: FriendContact[] = [
     name: "Ana Silva (Mock)",
     firstName: "Ana",
     lastName: "Silva",
+    email: "ana.silva@example.com",
     phoneNumbers: [{ id: "p1", label: "mobile", number: "+351912345678" }],
     imageAvailable: false,
     isSelected: false,
@@ -55,9 +58,8 @@ const MOCK_CONTACTS: FriendContact[] = [
     name: "Bruno Costa (Mock)",
     firstName: "Bruno",
     lastName: "Costa",
-    emails: [{ id: "e1", label: "work", email: "bruno@example.com" }],
-    imageAvailable: true,
-    image: { uri: "https://via.placeholder.com/40/FFA500/FFFFFF?Text=BC" },
+    email: "bruno@example.com",
+    imageAvailable: false,
     isSelected: false,
     contactType: Contacts.ContactTypes.Person,
   },
@@ -66,6 +68,7 @@ const MOCK_CONTACTS: FriendContact[] = [
     name: "Carlos Dias (Mock)",
     firstName: "Carlos",
     lastName: "Dias",
+    email: "carlos.dias@example.com",
     phoneNumbers: [{ id: "p2", label: "home", number: "+351212345678" }],
     imageAvailable: false,
     isSelected: false,
@@ -76,9 +79,8 @@ const MOCK_CONTACTS: FriendContact[] = [
     name: "Daniela Pereira (Mock)",
     firstName: "Daniela",
     lastName: "Pereira",
-    emails: [{ id: "e2", label: "home", email: "daniela@example.com" }],
-    imageAvailable: true,
-    image: { uri: "https://via.placeholder.com/40/34C759/FFFFFF?Text=DP" },
+    email: "daniela.pereira@example.com",
+    imageAvailable: false,
     isSelected: false,
     contactType: Contacts.ContactTypes.Person,
   },
@@ -87,7 +89,7 @@ const MOCK_CONTACTS: FriendContact[] = [
     name: "Zé Ninguém (Mock)",
     firstName: "Zé Ninguém",
     lastName: "Pereira",
-    emails: [{ id: "e3", label: "home", email: "ze@example.com" }],
+    email: "ze.ninguem@example.com",
     imageAvailable: false,
     phoneNumbers: [{ id: "p3", label: "mobile", number: "+351999999999" }],
     isSelected: false,
@@ -122,7 +124,7 @@ export default function AddFriendFlowScreen() {
     const { status } = await Contacts.requestPermissionsAsync(); // Mostra o diálogo do SO
     console.log("Resultado do pedido de permissão:", status);
     setPermissionStatus(status);
-    if (status === "granted") {
+    if (status === Contacts.PermissionStatus.GRANTED) {
       console.log("Permissão concedida, a carregar contactos...");
       await loadContactsInternal(); // Carrega os contactos
     } else {
@@ -143,7 +145,7 @@ export default function AddFriendFlowScreen() {
   };
 
   // Função interna para carregar contactos (assume que a permissão foi concedida)
-  const loadContactsInternal = async () => {
+  const loadContactsInternal_z = async (resetSelectionState = false) => {
     if (USE_MOCK_CONTACTS) {
       const initialSelectedIds = selectedContactObjects.map((c) => c.id);
       const updatedMockContacts = MOCK_CONTACTS.map((c) => ({
@@ -198,27 +200,93 @@ export default function AddFriendFlowScreen() {
     }
   };
 
-  // Verifica a permissão apenas ao montar
-  useEffect(() => {
+  const loadContactsInternal = async (resetSelectionState = false) => {
     if (USE_MOCK_CONTACTS) {
-      loadContactsInternal(); // Carrega mocks diretamente
+      console.log(
+        "A usar dados MOCK de contactos. Reset selection:",
+        resetSelectionState
+      );
+      const initialMockContacts = MOCK_CONTACTS.map((c) => ({
+        ...c,
+        isSelected: resetSelectionState
+          ? false
+          : selectedContactObjects.find((sel) => sel.id === c.id)?.isSelected ||
+            false,
+      }));
+      setContacts(initialMockContacts);
+      setLoadingContacts(false);
+      setLoadingInitialPermission(false);
+      setPermissionStatus(Contacts.PermissionStatus.GRANTED);
       return;
     }
-    const checkInitialPermission = async () => {
+    console.log(
+      "A carregar contactos reais. Reset selection:",
+      resetSelectionState
+    );
+    setLoadingContacts(true);
+    try {
+      const { data } = await Contacts.getContactsAsync({
+        fields: [
+          Contacts.Fields.FirstName,
+          Contacts.Fields.LastName,
+          Contacts.Fields.PhoneNumbers,
+          Contacts.Fields.Emails,
+          Contacts.Fields.ImageAvailable,
+          Contacts.Fields.Image,
+          Contacts.Fields.ContactType,
+        ],
+      });
+      if (data.length > 0) {
+        const formattedContacts: ContactItem[] = data
+          .filter(
+            (c) =>
+              c.firstName ||
+              c.lastName ||
+              (c.emails && c.emails.length > 0) ||
+              (c.phoneNumbers && c.phoneNumbers.length > 0)
+          )
+          .map((c) => ({
+            ...c,
+            name:
+              `${c.firstName || ""} ${c.lastName || ""}`.trim() ||
+              (c.emails && c.emails[0]?.email) ||
+              (c.phoneNumbers && c.phoneNumbers[0]?.number) ||
+              "Contacto Sem Nome",
+            isSelected: resetSelectionState
+              ? false
+              : selectedContactObjects.find((sel) => sel.id === c.id)
+                  ?.isSelected || false,
+          }))
+          .sort((a, b) => a.name.localeCompare(b.name));
+        setContacts(formattedContacts);
+      }
+    } catch (error) {
+      console.error("Erro ao carregar contactos:", error);
+      Alert.alert("Erro", "Não foi possível carregar os contactos.");
+    } finally {
+      setLoadingContacts(false);
+    }
+  };
+
+  // Verifica a permissão apenas ao montar
+  useEffect(() => {
+    const initialLoad = async () => {
+      if (USE_MOCK_CONTACTS) {
+        await loadContactsInternal(true);
+        setSelectedContactObjects([]);
+        return;
+      }
       setLoadingInitialPermission(true);
       const { status: currentStatus } = await Contacts.getPermissionsAsync();
-      console.log("Status inicial da permissão de contactos:", currentStatus);
       setPermissionStatus(currentStatus);
-
-      if (currentStatus === "granted") {
-        setLoadingContacts(true); // Prepara para carregar contactos
-        await loadContactsInternal();
+      if (currentStatus === Contacts.PermissionStatus.GRANTED) {
+        setLoadingContacts(true);
+        await loadContactsInternal(true);
+        setSelectedContactObjects([]);
       }
-      // Se 'undetermined' ou 'denied', não faz nada automaticamente.
-      // A UI renderizada por renderContent() tratará de mostrar os botões corretos.
       setLoadingInitialPermission(false);
     };
-    checkInitialPermission();
+    initialLoad();
   }, []);
 
   const handleNext = () => {
@@ -246,7 +314,10 @@ export default function AddFriendFlowScreen() {
       headerTitleAlign: "center",
       headerLeft: () => (
         <TouchableOpacity
-          onPress={() => router.back()}
+          onPress={() => {
+            setSelectedContactObjects([]);
+            router.replace("/(tabs)");
+          }}
           style={styles.headerButton}
         >
           <Text style={styles.headerButtonText}>Cancelar</Text>
@@ -272,7 +343,7 @@ export default function AddFriendFlowScreen() {
       ),
       headerStyle: styles.headerStyle,
     });
-  }, [navigation, router, selectedContactObjects.length]); // Atualizado para selectedContactObjects
+  }, [navigation, router, selectedContactObjects.length]);
 
   const toggleContactSelection = (contactToToggle: ContactItem) => {
     setContacts((prevContacts) =>
@@ -434,6 +505,58 @@ export default function AddFriendFlowScreen() {
     );
   }; */
 
+  // Efeito para resetar seleções quando o ecrã ganha foco
+  useEffect(() => {
+    const unsubscribe = navigation.addListener("focus", async () => {
+      console.log(
+        "AddFriendFlowScreen GANHOU FOCO. A verificar VERIFIED_CONTACTS_AFTER_REMOVAL_KEY..."
+      );
+      setSearchQuery(""); // Sempre limpa a pesquisa ao focar
+
+      try {
+        const updatedVerifiedContactsJson = await AsyncStorage.getItem(
+          VERIFIED_CONTACTS_AFTER_REMOVAL_KEY
+        );
+        if (updatedVerifiedContactsJson) {
+          console.log(
+            "Lista de verificados atualizada encontrada no AsyncStorage."
+          );
+          const updatedVerifiedContacts = JSON.parse(
+            updatedVerifiedContactsJson
+          ) as ContactItem[];
+          setSelectedContactObjects(updatedVerifiedContacts); // Define os chips selecionados
+          // Atualiza o estado 'isSelected' na lista principal 'contacts'
+          setContacts((prevContacts) =>
+            prevContacts.map((contact) => ({
+              ...contact,
+              isSelected: updatedVerifiedContacts.some(
+                (sel) => sel.id === contact.id
+              ),
+            }))
+          );
+          await AsyncStorage.removeItem(VERIFIED_CONTACTS_AFTER_REMOVAL_KEY); // Limpa a chave
+        } else {
+          // Se não há sinal (ex: voltou com "Cancelar" ou é a primeira vez),
+          // NÃO limpa selectedContactObjects. O reset inicial é feito no useEffect de montagem.
+          console.log(
+            "Nenhuma lista de verificados atualizada encontrada. Mantendo seleções atuais (se houver)."
+          );
+          setContacts((prevContacts) =>
+            prevContacts.map((contact) => ({
+              ...contact,
+              isSelected: selectedContactObjects.some(
+                (sel) => sel.id === contact.id
+              ),
+            }))
+          );
+        }
+      } catch (e) {
+        console.error("Erro ao ler VERIFIED_CONTACTS_AFTER_REMOVAL_KEY:", e);
+      }
+    });
+    return unsubscribe;
+  }, [navigation, selectedContactObjects]); 
+
   const renderContent = () => {
     if (
       !USE_MOCK_CONTACTS &&
@@ -525,7 +648,8 @@ export default function AddFriendFlowScreen() {
             onChangeText={setSearchQuery}
             placeholderTextColor="#8E8E93"
             editable={
-              (USE_MOCK_CONTACTS || permissionStatus === "granted") &&
+              (USE_MOCK_CONTACTS ||
+                permissionStatus === Contacts.PermissionStatus.GRANTED) &&
               !loadingContacts
             }
           />

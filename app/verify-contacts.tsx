@@ -1,5 +1,5 @@
 // app/verify-contacts.tsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
     View,
     Text,
@@ -19,25 +19,27 @@ import {
     } from "expo-router";
 import { Ionicons, Feather } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { supabase } from "../../config/supabase"; // Ajuste o caminho
-import { useAuth } from "../../context/AuthContext"; // Ajuste o caminho
+import { supabase } from "../config/supabase"; // Ajuste o caminho
+import { useAuth } from "../context/AuthContext"; // Ajuste o caminho
 import AsyncStorage from "@react-native-async-storage/async-storage";
     // Reutiliza a interface ContactItem de AddFriendFlowScreen
     // Idealmente, esta interface estaria num ficheiro de tipos partilhado
     interface ContactItem {
-    id: string;
-    name: string;
-    firstName?: string;
-    lastName?: string;
-    emails?: Array<{ email: string; label: string; id: string }>;
-    phoneNumbers?: Array<{ number?: string; label: string; id: string }>;
-    imageAvailable?: boolean;
-    image?: { uri: string };
+        id: string;
+        name: string;
+        firstName?: string;
+        lastName?: string;
+        email: string;
+        phoneNumbers?: Array<{ number?: string; label: string; id: string }>;
+        imageAvailable?: boolean;
+        image?: { uri: string };
     // Não precisa de isSelected aqui
     }
 
-    const DEFAULT_AVATAR_VERIFY =
-    "https://via.placeholder.com/60/BDBDBD/FFFFFF?Text=";
+    const FRIENDS_STORAGE_KEY_PREFIX = "paga_a_mostarda_friends_data_v2_";
+    // Nova chave para comunicar a lista atualizada após remoções
+    export const VERIFIED_CONTACTS_AFTER_REMOVAL_KEY = "paga_a_mostarda_verified_contacts_after_removal";
+
 
     export default function VerifyContactsScreen() {
     const router = useRouter();
@@ -49,76 +51,59 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
     const [contactsToVerify, setContactsToVerify] = useState<ContactItem[]>([]);
 
     useEffect(() => {
+      // Limpa o sinal de atualização ao entrar, para não ser lido desnecessariamente pelo AddFriendFlowScreen
+        AsyncStorage.removeItem(VERIFIED_CONTACTS_AFTER_REMOVAL_KEY);
+
         if (params.selectedContacts) {
             try {
-            const parsedContacts = JSON.parse(
-                params.selectedContacts
-            ) as ContactItem[];
-            setContactsToVerify(parsedContacts);
-            if (parsedContacts.length === 0) {
-                // Se a lista inicial já estiver vazia, volta
-                Alert.alert("Nenhum contacto", "Não há contactos para verificar.");
-                router.back();
-            }
+                const parsedContacts = JSON.parse(params.selectedContacts) as ContactItem[];
+                setContactsToVerify(parsedContacts);
+                if (parsedContacts.length === 0) {
+                    Alert.alert("Nenhum contacto", "Não há contactos para verificar.", 
+                        [{ text: "OK", onPress: () => router.back() },]
+                    );
+                }
             } catch (e) {
-            console.error("Erro ao fazer parse dos contactos selecionados:", e);
-            Alert.alert(
-                "Erro",
-                "Não foi possível carregar os contactos para verificação."
-            );
-            router.back();
+                Alert.alert("Erro", "Não foi possível carregar os contactos.", [
+                    { text: "OK", onPress: () => router.back() },
+                ]);
             }
-        } else if (!params.selectedContacts && contactsToVerify.length === 0) {
-            // Se não há params e a lista está vazia (ex: utilizador voltou para este ecrã de alguma forma)
-            Alert.alert("Nenhum contacto", "Não há contactos para verificar.");
-            router.back();
+        } else if (contactsToVerify.length === 0) {
+            Alert.alert("Nenhum contacto", "Não há contactos para verificar.", [
+            { text: "OK", onPress: () => router.back() },
+            ]);
         }
-    }, [params.selectedContacts]); 
+    }, [params.selectedContacts]);
 
-    const handleConclude = async () => {
+    const handleConclude = useCallback(async () => {
         if (!auth.user?.id || contactsToVerify.length === 0) {
-        Alert.alert(
+            Alert.alert(
             "Erro",
             "Nenhum contacto para adicionar ou utilizador não autenticado."
-        );
-        return;
+            );
+            return;
         }
-
         const friendsToAdd = contactsToVerify.map((contact) => ({
-        user_id: auth.user!.id, // auth.user.id já foi verificado
-        name: contact.name,
-        // Aqui pode decidir qual informação do contacto usar para um futuro 'contact_info' ou 'phone'/'email'
-        // Por exemplo, o primeiro número de telefone ou email
-        phone: contact.phoneNumbers?.[0]?.number || null,
-        email: contact.emails?.[0]?.email || null,
-        avatar_url:
-            contact.imageAvailable && contact.image ? contact.image.uri : null, // Avatar local não será guardado diretamente
-        balance: 0,
-        // Adicione um campo para o ID do contacto do dispositivo se quiser evitar duplicados futuros
-        // device_contact_id: contact.id
+            user_id: auth.user!.id,
+            name: contact.name,
+            phone_number: contact.phoneNumbers?.[0]?.number || null,
+            email: contact.email || null,
+            balance: 0,
+            created_at: new Date().toISOString(),
         }));
-
-        console.log("A adicionar amigos ao Supabase:", friendsToAdd);
-
         try {
-        const { error } = await supabase.from("friends").insert(friendsToAdd);
-        if (error) throw error;
-
-        Alert.alert("Sucesso!", `${friendsToAdd.length} amigo(s) adicionado(s).`);
-        // Limpar cache de amigos no ecrã principal para recarregar
-        const friendsListCacheKey = `paga_a_mostarda_friends_data_v2_${auth.user.id}`; // Use a chave correta
-        await AsyncStorage.removeItem(friendsListCacheKey);
-
-        // Voltar para o ecrã de amigos (index das tabs)
-        router.replace("/(tabs)");
+            const { error } = await supabase
+                .from("friends").insert(friendsToAdd);
+            if (error) throw error;
+            Alert.alert("Sucesso!",`${friendsToAdd.length} amigo(s) adicionado(s).`);
+            const friendsListCacheKey = `${FRIENDS_STORAGE_KEY_PREFIX}${auth.user.id}`;
+            await AsyncStorage.removeItem(friendsListCacheKey);
+            router.replace("/(tabs)");
         } catch (error: any) {
-        console.error("Erro ao adicionar amigos ao Supabase:", error);
-        Alert.alert(
-            "Erro",
-            `Não foi possível adicionar os amigos: ${error.message}`
-        );
+            Alert.alert("Erro", `Não foi possível adicionar: ${error.message}`);
         }
-    };
+    }, [auth.user, contactsToVerify, router]);
+
 
     const handleRemoveContact = (contactIdToRemove: string) => {
         Alert.alert(
@@ -129,18 +114,19 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
                 {
                     text: "Remover",
                     style: "destructive",
-                    onPress: () => {
-                        const updatedContacts = contactsToVerify.filter(
-                            (contact) => contact.id !== contactIdToRemove
-                        );
+                    onPress: async () => {
+                        const updatedContacts = contactsToVerify.filter((contact) => contact.id !== contactIdToRemove);
                         setContactsToVerify(updatedContacts);
+                        try {
+                            await AsyncStorage.setItem(VERIFIED_CONTACTS_AFTER_REMOVAL_KEY, JSON.stringify(updatedContacts));
+                            console.log("[VerifyContactsScreen] Lista atualizada guardada no AsyncStorage após remoção.");
+                        } catch (e) {
+                            console.error( "Erro ao guardar lista atualizada no AsyncStorage:",e);
+                        }
                         // Se a lista ficar vazia após remover, volta para o ecrã anterior
                         if (updatedContacts.length === 0) {
-                            Alert.alert(
-                            "Lista Vazia",
-                            "Todos os contactos foram removidos da lista de verificação."
-                            );
-                            router.back();
+                            Alert.alert("Lista Vazia", "Todos os contactos foram removidos da lista de verificação.");
+                            router.replace("/add-friend-flow");
                         }
                     },
                 },
@@ -189,7 +175,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
     const renderVerifyItem = ({ item }: { item: ContactItem }) => {
         const displayInfo =
             item.phoneNumbers?.[0]?.number ||
-            item.emails?.[0]?.email ||
+            item.email ||
             "Sem informação de contacto";
         const avatarText = (item.firstName ||
             item.name.split(" ")[0] ||

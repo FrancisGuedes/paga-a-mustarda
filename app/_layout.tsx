@@ -72,7 +72,7 @@ function ProtectedNavigation() {
       <Stack.Screen name="(auth)/login" />{" "}
       {/* O (auth) tem o seu próprio _layout.tsx para a stack de auth */}
       <Stack.Screen
-        name="select-split-type" // app/select-split-type.tsx
+        name="select-split-type"
         options={{
           presentation: "modal",
         }}

@@ -62,28 +62,39 @@ function ProtectedNavigation() {
   // Se autenticado, ou no fluxo de autenticação, o Stack abaixo define as rotas.
   // A lógica de redirecionamento no useEffect já tratou de nos colocar no caminho certo.
   return (
-    <Stack screenOptions={{ headerShown: false /* Oculta headers por defeito para a Stack raiz */ }}>
-      <Stack.Screen name="(tabs)" /> {/* O (tabs) tem o seu próprio _layout.tsx para definir as Tabs */}
-      <Stack.Screen name="(auth)/login" /> {/* O (auth) tem o seu próprio _layout.tsx para a stack de auth */}
-      
-      <Stack.Screen 
+    <Stack
+      screenOptions={{
+        headerShown: false /* Oculta headers por defeito para a Stack raiz */,
+      }}
+    >
+      <Stack.Screen name="(tabs)" />{" "}
+      {/* O (tabs) tem o seu próprio _layout.tsx para definir as Tabs */}
+      <Stack.Screen name="(auth)/login" />{" "}
+      {/* O (auth) tem o seu próprio _layout.tsx para a stack de auth */}
+      <Stack.Screen
         name="select-split-type" // app/select-split-type.tsx
-        options={{ 
-          presentation: 'modal',
-          // title: 'Como foi pago?',
-          // headerShown: true,
-        }} 
+        options={{
+          presentation: "modal",
+        }}
       />
-      <Stack.Screen 
-        name="select-date" 
-        options={{ 
-          presentation: 'modal' 
-        }} />
-      <Stack.Screen 
+      <Stack.Screen
+        name="select-date"
+        options={{
+          presentation: "modal",
+        }}
+      />
+      <Stack.Screen
         name="add-expense-modal"
-        options={{ 
-          presentation: 'modal' 
-        }} />
+        options={{
+          presentation: "modal",
+        }}
+      />
+      <Stack.Screen
+        name="verify-contacts"
+        options={{
+          presentation: "modal",
+        }}
+      />
       <Stack.Screen name="+not-found" />
     </Stack>
   );

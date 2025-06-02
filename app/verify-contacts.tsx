@@ -99,12 +99,10 @@ const handleConclude = useCallback(async () => {
         const friendsListCacheKey = `${FRIENDS_STORAGE_KEY_PREFIX}${auth.user.id}`;
         await AsyncStorage.removeItem(friendsListCacheKey);
 
+        /* [BEGIN] Envio de emails */
         console.log("[VerifyContactsScreen] Inicio de envio de email.");
         for (const contact of contactsToVerify) {
-            if (
-                contact.email.trim() !== undefined &&
-                contact.email.trim() !== ""
-            ) {
+            if (contact.email.trim() !== undefined && contact.email.trim() !== "") {
                 try {
                 // Obtenha o nome de quem convida (utilizador logado)
                 // Se tiver um campo 'full_name' ou 'display_name' no user_metadata ou no seu perfil:
@@ -134,13 +132,8 @@ const handleConclude = useCallback(async () => {
                             body: bodyPayload,
                         }
                     ).catch((err) => {
-                        console.error(
-                        `Erro ao invocar função 'invitation-email' para ${contact.email}:`,
-                        err
-                        );
-                        throw new Error(
-                        `Erro ao invocar função 'invitation-email' para ${contact.email}: ${err.message}`
-                        );
+                        console.error(`Erro ao invocar função 'invitation-email' para ${contact.email}:`, err);
+                        throw new Error(`Erro ao invocar função 'invitation-email' para ${contact.email}: ${err.message}`);
                     });
                 console.log("[VerifyContactsScreen] Envio funcData: ", funcData);
                 if (funcError) {
@@ -165,7 +158,7 @@ const handleConclude = useCallback(async () => {
                 }
             }
         }
-        
+        /* [END] Envio de emails */
 
         router.replace("/(tabs)");
     } catch (error: any) {

@@ -56,6 +56,7 @@ useEffect(() => {
     if (params.selectedContacts) {
         try {
             const parsedContacts = JSON.parse(params.selectedContacts) as ContactItem[];
+            console.log("[VerifyContactsScreen] Contactos recebidos:", parsedContacts);
             setContactsToVerify(parsedContacts);
             if (parsedContacts.length === 0) {
                 Alert.alert("Nenhum contacto", "Não há contactos para verificar.", 

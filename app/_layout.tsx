@@ -95,6 +95,12 @@ function ProtectedNavigation() {
           presentation: "modal",
         }}
       />
+      <Stack.Screen
+        name="create-contact-manually"
+        options={{
+          presentation: "modal",
+        }}
+      />
       <Stack.Screen name="+not-found" />
     </Stack>
   );

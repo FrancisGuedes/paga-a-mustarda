@@ -23,6 +23,7 @@ import { useAuth } from "../../context/AuthContext";
 import { transcode } from "buffer";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { VERIFIED_CONTACTS_AFTER_REMOVAL_KEY } from "../verify-contacts";
+import { NEWLY_CREATED_CONTACT_KEY, NewManualContact } from "../create-contact-manually";
 
 interface ContactItem extends Contacts.Contact {
   isSelected?: boolean;
@@ -300,6 +301,7 @@ export default function AddFriendFlowScreen() {
     // Passa os dados dos contactos selecionados para o próximo ecrã
     // É melhor passar como string JSON se for complexo ou muitos dados
     const selectedContactsString = JSON.stringify(selectedContactObjects);
+    console.log("[handleNext] A navegar para verificar contactos:", selectedContactsString);
     router.push({
       pathname: "/verify-contacts", // Nova rota a ser criada
       params: { selectedContacts: selectedContactsString },
@@ -509,14 +511,52 @@ export default function AddFriendFlowScreen() {
   useEffect(() => {
     const unsubscribe = navigation.addListener("focus", async () => {
       console.log(
-        "AddFriendFlowScreen GANHOU FOCO. A verificar VERIFIED_CONTACTS_AFTER_REMOVAL_KEY..."
+        "AddFriendFlowScreen GANHOU FOCO. A verificar..."
       );
       setSearchQuery(""); // Sempre limpa a pesquisa ao focar
 
       try {
+        // 1. Verificar se um novo contacto foi criado manualmente
+        const newlyCreatedContactJson = await AsyncStorage.getItem(
+          NEWLY_CREATED_CONTACT_KEY
+        );
+        console.log("[FOCUS] novo contato manual: ", newlyCreatedContactJson);
+        if (newlyCreatedContactJson) {
+          const newManualContactData = JSON.parse(
+            newlyCreatedContactJson
+          ) as ContactItem;
+
+          console.log(
+            "Novo contacto manual encontrado no AsyncStorage newManualContactData: ",
+            newManualContactData
+          );
+
+          // Adiciona/Atualiza na lista de selecionados (chips)
+          setSelectedContactObjects([newManualContactData]);
+
+          // Adiciona/Atualiza na lista principal `contacts` para que o checkbox reflita a seleção
+          /* setContacts((prevContacts) => {
+            const existingIndex = prevContacts.findIndex(
+              (c) => c.id === newContactItem.id
+            );
+            if (existingIndex > -1) {
+              const updated = [...prevContacts];
+              updated[existingIndex] = newContactItem; // Atualiza com isSelected: true
+              return updated;
+            }
+            return [newContactItem, ...prevContacts].sort((a, b) =>
+              a.name.localeCompare(b.name)
+            );
+          }); */
+
+          await AsyncStorage.removeItem(NEWLY_CREATED_CONTACT_KEY);
+          return;
+        }
+
         const updatedVerifiedContactsJson = await AsyncStorage.getItem(
           VERIFIED_CONTACTS_AFTER_REMOVAL_KEY
         );
+        // 2. Verificar se há uma lista de verificados atualizada
         if (updatedVerifiedContactsJson) {
           console.log(
             "Lista de verificados atualizada encontrada no AsyncStorage."
@@ -671,7 +711,7 @@ export default function AddFriendFlowScreen() {
         <TouchableOpacity
           style={styles.addNewContactButton}
           onPress={() =>
-            Alert.alert("Adicionar Novo", "Funcionalidade a implementar")
+            router.push("/create-contact-manually")
           }
         >
           <Ionicons

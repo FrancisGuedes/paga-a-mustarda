@@ -1,0 +1,6 @@
+// /app/(auth)/register.tsx
+import RegisterScreen from "@/features/auth/screens/RegisterScreen";
+
+export default function RegisterPage() {
+    return <RegisterScreen />;
+}

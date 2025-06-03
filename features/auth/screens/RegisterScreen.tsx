@@ -1,68 +1,66 @@
-// src/features/auth/screens/LoginScreen.tsx
-import { useNavigation } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import React, { useState } from 'react';
+// features/auth/screens/RegisterScreen.tsx
+import { useNavigation } from "@react-navigation/native";
+import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import React, { useState } from "react";
 import {
     ActivityIndicator,
     Alert,
     KeyboardAvoidingView,
-    Platform, // Using Alert for simplicity instead of toast/sonner
+    Platform,
     ScrollView,
     StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
     View,
-} from 'react-native';
-// Assuming your AuthContext is adapted for React Native
-import { useAuth } from '../../../context/AuthContext';
-// TEMP: Mock useAuth for demonstration if AuthContext is missing
-import { AntDesign, Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+} from "react-native";
+import { useAuth } from "../../../context/AuthContext";
+import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 
-// Define your AuthStackParamList if you haven't already (e.g., in your navigation types file)
-// This is an example, adjust it to your actual navigation setup
 type AuthStackParamList = {
     Login: undefined;
     Register: undefined;
-  // Add other auth-related screens here
 };
 
-// Define the navigation prop type for this screen
-type LoginScreenNavigationProp = NativeStackNavigationProp<
+type RegisterScreenNavigationProp = NativeStackNavigationProp<
     AuthStackParamList,
-    'Login'
+    "Register"
 >;
 
-export default function LoginScreen() {
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const { auth, login, loginWithGoogle } = useAuth(); // Use your actual adapted useAuth hook
-    const navigation = useNavigation<LoginScreenNavigationProp>();
+export default function RegisterScreen() {
+    const [email, setEmail] = useState("");
+    const [password, setPassword] = useState("");
+    const [name, setName] = useState(''); // Novo estado para o nome
+
+
+    const [confirmPassword, setConfirmPassword] = useState("");
+    const { auth, register } = useAuth();
+    const navigation = useNavigation<RegisterScreenNavigationProp>();
     const router = useRouter();
-    const handleLogin = async () => {
-        // Basic validation
-        if (!email.trim() || !password.trim()) {
-            Alert.alert('Campos em Falta', 'Por favor, preencha o email e a password.');
+
+    const handleRegister = async () => {
+        if (!email.trim() || !password.trim() || !confirmPassword.trim() || !name.trim()) {
+            Alert.alert("Campos em Falta", "Por favor, preencha todos os campos.");
             return;
         }
+
+        if (password !== confirmPassword) {
+            Alert.alert("Erro", "As passwords não coincidem.");
+            return;
+        }
+
+        if (password.length < 6) {
+            Alert.alert("Erro", "A password deve ter pelo menos 6 caracteres.");
+            return;
+        }
+
         try {
-            await login(email, password);
-            // Navigation on successful login would typically be handled by a listener
-            // on the auth state in your App.tsx or main navigator.
+            await register(email, password, name);
         } catch (error) {
-            // Error is typically handled within the login function of useAuth
-            console.log('Login failed in component:', error);
+            console.log("Register failed in component:", error);
         }
     };
-
-    const handleGoogleLogin = async () => {
-        try {
-            await loginWithGoogle();
-        } catch (error) {
-            console.log('Google login failed in component:', error);
-        }
-    }
 
     return (
         <KeyboardAvoidingView
@@ -70,14 +68,13 @@ export default function LoginScreen() {
             style={styles.keyboardAvoidingContainer}
         >
             <ScrollView contentContainerStyle={styles.scrollContainer}>
-            {/* Header would typically be part of React Navigation options */}
-            {/* <Text style={styles.headerTitle}>Login</Text> */}
-
             <View style={styles.container}>
                 <View style={styles.innerContainer}>
                 <View style={styles.textCenter}>
-                    <Text style={styles.title}>Bem-vindo de volta</Text>
-                    <Text style={styles.subtitle}>Faça login na sua conta</Text>
+                    <Text style={styles.title}>Criar Conta</Text>
+                    <Text style={styles.subtitle}>
+                    Registe-se para começar a dividir despesas
+                    </Text>
                 </View>
 
                 <View style={styles.formContainer}>
@@ -91,9 +88,21 @@ export default function LoginScreen() {
                         keyboardType="email-address"
                         autoCapitalize="none"
                         autoComplete="email"
-                        testID="loginEmailInput"
+                        testID="registerEmailInput"
                     />
                     </View>
+
+                    <View style={styles.inputGroup}>
+                <Text style={styles.label}>Nome</Text>
+                    <TextInput
+                    style={styles.input}
+                    placeholder="O seu nome completo"
+                    value={name}
+                    onChangeText={setName}
+                    autoCapitalize="words"
+                    testID="registerNameInput"
+                    />
+                </View>
 
                     <View style={styles.inputGroup}>
                     <Text style={styles.label}>Password</Text>
@@ -103,7 +112,19 @@ export default function LoginScreen() {
                         value={password}
                         onChangeText={setPassword}
                         secureTextEntry
-                        testID="loginPasswordInput"
+                        testID="registerPasswordInput"
+                    />
+                    </View>
+
+                    <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Confirmar Password</Text>
+                    <TextInput
+                        style={styles.input}
+                        placeholder="••••••••"
+                        value={confirmPassword}
+                        onChangeText={setConfirmPassword}
+                        secureTextEntry
+                        testID="registerConfirmPasswordInput"
                     />
                     </View>
                 </View>
@@ -115,18 +136,18 @@ export default function LoginScreen() {
                 <TouchableOpacity
                     style={[
                     styles.button,
-                    styles.signInButton,
+                    styles.registerButton,
                     auth.isLoading && styles.buttonDisabled,
                     ]}
-                    onPress={handleLogin}
+                    onPress={handleRegister}
                     disabled={auth.isLoading}
-                    testID="loginButton"
+                    testID="registerButton"
                 >
                     {auth.isLoading ? (
                     <ActivityIndicator color="#fff" />
                     ) : (
                     <>
-                        <Text style={styles.buttonText}>Entrar</Text>
+                        <Text style={styles.buttonText}>Registar</Text>
                         <Ionicons
                         name="arrow-forward"
                         size={18}
@@ -136,64 +157,35 @@ export default function LoginScreen() {
                     </>
                     )}
                 </TouchableOpacity>
-                </View>
-
-                <View style={styles.dividerContainer}>
-                <View style={styles.dividerLine} />
-                <Text style={styles.dividerText}>Ou continue com</Text>
-                <View style={styles.dividerLine} />
-                </View>
-
-                <TouchableOpacity
-                style={[
-                    styles.button,
-                    styles.googleButton,
-                    auth.isLoading && styles.buttonDisabled,
-                ]}
-                onPress={handleGoogleLogin} // Use the new handler
-                disabled={auth.isLoading}
-                >
-                <AntDesign
-                    name="google"
-                    size={20}
-                    color="#DB4437"
-                    style={styles.buttonIconLeft}
-                />
-                <Text style={[styles.buttonText, styles.googleButtonText]}>
-                    Entrar com Google
-                </Text>
-                </TouchableOpacity>
 
                 <View style={styles.footerTextContainer}>
-                <Text style={styles.footerText}>Não tem uma conta? </Text>
-                <TouchableOpacity onPress={() => router.push("/(auth)/register")}>
+                    <Text style={styles.footerText}>Já tem uma conta? </Text>
+                    <TouchableOpacity onPress={() => router.push("/(auth)/login")}>
                     <Text style={[styles.footerText, styles.linkText]}>
-                    Registe-se
+                        Faça login
                     </Text>
-                </TouchableOpacity>
+                    </TouchableOpacity>
+                </View>
                 </View>
             </View>
-            </ScrollView>
-        </KeyboardAvoidingView>
+        </ScrollView>
+    </KeyboardAvoidingView>
     );
 }
 
+// Use os mesmos styles do LoginScreen
 const styles = StyleSheet.create({
     keyboardAvoidingContainer: {
         flex: 1,
+    },
+    registerButton: {
+        backgroundColor: "#fb923c",
     },
     scrollContainer: {
         flexGrow: 1,
         justifyContent: 'center', // Centraliza o conteúdo se for menor que a tela
         backgroundColor: '#f0f2f5', // Um cinza claro para o fundo da tela
     },
-    // headerTitle: { // Se você quiser um título manual
-    //   fontSize: 24,
-    //   fontWeight: 'bold',
-    //   textAlign: 'center',
-    //   paddingVertical: 20,
-    //   backgroundColor: 'white', // Exemplo
-    // },
     container: {
         flex: 1, // Ocupa o espaço disponível
         justifyContent: 'center', // Centraliza verticalmente

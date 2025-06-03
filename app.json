@@ -36,10 +36,11 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/pagaamustarda.png",
-          "imageWidth": 200,
+          "image": "./assets/images/init-logo.png",
+          "imageWidth": "100%",
+          "imageHeight": "100%",
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff"
+          "backgroundColor": "#F4D35E"
         }
       ]
     ],

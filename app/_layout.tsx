@@ -71,6 +71,7 @@ function ProtectedNavigation() {
       {/* O (tabs) tem o seu próprio _layout.tsx para definir as Tabs */}
       <Stack.Screen name="(auth)/login" />{" "}
       {/* O (auth) tem o seu próprio _layout.tsx para a stack de auth */}
+      <Stack.Screen name="(auth)/register" />{" "}
       <Stack.Screen
         name="select-split-type"
         options={{

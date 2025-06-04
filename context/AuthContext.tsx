@@ -216,7 +216,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setAuthInternal((prev) => ({ ...prev, isLoading: true, error: null }));
 
     try {
-      console.log("[register] Tentativa de registo com:", { email, password, displayName });
+      /* console.log("[register] Tentativa de registo com:", {
+        email,
+        password,
+        displayName,
+      }); */
       const { data, error } = await supabase.auth.signUp({
         email: email.trim(),
         password,
@@ -255,12 +259,40 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         // Utilizador criado e logado automaticamente
         Alert.alert("Registo", "Conta registada com sucesso!");
       }
+
+      // [START] Envio de email de boas-vindas
+      const bodyPayload = {
+        toEmail: email,
+        toName: displayName || email.split('@')[0] || 'Utilizador',
+        name: displayName,
+        link: "https://www.google.com", // TODO: alterar para APP
+      };
+
+      /* console.log(
+        `A invocar função 'invitation-email' com payload:`,
+        bodyPayload
+      ); */
+
+      await supabase.functions
+        .invoke("welcome-register-email", {
+          body: bodyPayload,
+        })
+        .catch((err) => {
+          console.error(
+            `Erro ao invocar função 'welcome-register-email' para ${email}:`,
+            err
+          );
+          throw new Error(
+            `Erro ao invocar função 'welcome-register-email' para ${email}: ${err.message}`
+          );
+        });
+      // [END] Envio de email de boas-vindas
+
     } catch (error) {
       setAuthInternal((prev) => ({ ...prev, isLoading: false }));
       throw error;
     }
   };
-
 
   /* const logout = async () => {
     setAuthInternal((prev) => ({ ...prev, isLoading: true, error: null }));

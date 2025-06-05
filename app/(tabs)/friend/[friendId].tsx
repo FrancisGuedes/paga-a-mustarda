@@ -207,10 +207,14 @@ export default function FriendExpensesScreen() {
         friendId: routeFriendId,
         name,
         avatarUrl: routeFriendAvatarUrl,
+        registeredUserId: routeRegisteredFriendUserId,
+        friendEmail: routeRegisteredFriendEmail,
     } = useLocalSearchParams<{
         friendId: string;
         name?: string;
         avatarUrl?: string;
+        registeredUserId?: string;
+        friendEmail?: string;
     }>();
     const { auth } = useAuth();
     const { setCurrentFriend } = useCurrentFriend();
@@ -231,6 +235,8 @@ export default function FriendExpensesScreen() {
     const friendFirstName = friendName.split(" ")[0];
     const friendAvatar = routeFriendAvatarUrl || `${DEFAULT_FRIEND_AVATAR}${friendFirstName.substring(0, 1)}`;
     const [skeletonItemCount, setSkeletonItemCount] = useState(DEFAULT_SKELETON_COUNT); 
+    // Determina se o amigo é um utilizador registado da app
+    const isFriendRegistered = !!routeRegisteredFriendUserId; 
 
     //console.log(`Despesas com ${friendName}:`, expenses);
 
@@ -585,9 +591,27 @@ export default function FriendExpensesScreen() {
         0
     );
 
-    let balanceSummaryText = `Contas acertadas com ${friendFirstName}.`;
+    //let balanceSummaryText = `Contas acertadas com ${friendFirstName}.`;
+
+    let balanceSummaryText = isFriendRegistered ? 
+    (expenses.length === 0 ? `Ainda não há despesas com ${friendFirstName}.` : `Contas acertadas com ${friendFirstName}.`) : 
+    (routeRegisteredFriendEmail || 'Contacto não registado');
     let balanceSummaryColor = styles.settledColorText;
-    if (balanceWithFriend > 0) {
+
+
+    if (isFriendRegistered && expenses.length > 0) {
+        if (balanceWithFriend > 0) { 
+            balanceSummaryText = `${friendFirstName} deve-lhe ${balanceWithFriend.toFixed(2)} €`; 
+            balanceSummaryColor = styles.positiveBalanceColor; 
+        } 
+        else if (balanceWithFriend < 0) { 
+            balanceSummaryText = `Deve a ${friendFirstName} ${Math.abs(balanceWithFriend).toFixed(2)} €`; 
+            balanceSummaryColor = styles.negativeBalanceColor; }
+    } else if (!isFriendRegistered) {
+        balanceSummaryColor = styles.warningColorText;
+    }
+
+    /* if (balanceWithFriend > 0) {
         // Amigo deve-me
         balanceSummaryText = `${friendFirstName} deve-lhe ${balanceWithFriend.toFixed(
             2
@@ -599,7 +623,7 @@ export default function FriendExpensesScreen() {
             balanceWithFriend
         ).toFixed(2)} €`;
         balanceSummaryColor = styles.negativeBalanceColor;
-    }
+    } */
 
     // Agrupar despesas por mês/ano
     const groupedExpenses = expenses.reduce((acc, expense) => {
@@ -655,10 +679,13 @@ export default function FriendExpensesScreen() {
                     <View style={styles.headerContent}>
                         {/* <Image source={{ uri: friendAvatar }} style={styles.headerAvatar} /> */}
                         <Text style={styles.headerFriendName}>{friendName}</Text>
-                        <SkeletonPlaceholder width={120} height={18} style={{ backgroundColor: '#6DB5F2', marginTop: 4 }} />
+                        <SkeletonPlaceholder width={120} height={18} style={{ marginTop: 4 }} />
+                        {!isFriendRegistered && (
+                            <SkeletonPlaceholder width={150} height={30} style={{ marginTop: 10, borderRadius: 15 }} />
+                        )}
                     </View>
                     <TouchableOpacity style={styles.settingsIcon}>
-                        <Feather name="settings" size={24} color="#fff" />
+                        <Feather name="settings" size={24} color="#333" />
                     </TouchableOpacity>
                 </View>
 
@@ -701,9 +728,17 @@ export default function FriendExpensesScreen() {
                     {/* <Image source={{ uri: `${DEFAULT_FRIEND_AVATAR}${friendName.charAt(0)}&size=128` }} style={styles.headerAvatar} /> */}
                     <Text style={styles.headerFriendName}>{friendName}</Text>
                     <Text style={[styles.headerBalanceSummary, balanceSummaryColor]}>
-                        {balanceSummaryText}
+                        {balanceSummaryText} {!isFriendRegistered && routeRegisteredFriendEmail && (
+                        <Ionicons name="warning-sharp" style={{ marginLeft: 5 }} size={18} color={styles.warningColorText.color} />
+                    )}
                     </Text>
+                    
                 </View>
+                {!isFriendRegistered && (
+                    <TouchableOpacity style={styles.inviteButton} onPress={() => Alert.alert("Reenviar Convite", `Reenviar convite para ${routeRegisteredFriendEmail || friendName}?`)}>
+                        <Text style={styles.inviteButtonText}>Reenviar convite</Text>
+                    </TouchableOpacity>
+                )}
                 {/* </ImageBackground> */}
                 <TouchableOpacity style={styles.settingsIcon}>
                     <Feather name="settings" size={24} color="#fff" />
@@ -744,12 +779,23 @@ export default function FriendExpensesScreen() {
                     />
                 }
             >
-                {monthSections.length === 0 && !loading && (
+                {/* {monthSections.length === 0 && !loading && (
                     <Text style={styles.noExpensesText}>
                         {error
                             ? `Erro: ${error}`
                             : `Ainda não há despesas com ${friendName}.`}
                     </Text>
+                )} */}
+
+                {expenses.length === 0 && !loading && !isRefreshing && (
+                    <View style={styles.noExpensesContent}>
+                        <Ionicons name="document-text-outline" size={60} color="#CEDAEF" style={{marginBottom: 20}} />
+                        <Text style={styles.noExpensesTitle}>Ainda não há despesas.</Text>
+                        <Text style={styles.noExpensesSubtitle}>
+                            Toque no botão de adição abaixo para adicionar uma despesa com este amigo.
+                        </Text>
+                        {/* A seta é mais difícil de replicar exatamente, pode usar um ícone ou texto */}
+                    </View>
                 )}
                 {error && monthSections.length === 0 && (
                     <Button
@@ -897,7 +943,7 @@ const styles = StyleSheet.create({
         textAlign: "center",
     },
     customHeader: {
-        backgroundColor: "#4A90E2", // Cor de fundo do header personalizado (simulando a imagem)
+        backgroundColor: "#fff", // Cor de fundo do header personalizado (simulando a imagem)
         paddingTop: 10, // Espaço para a barra de status já tratada pelo insets.top na View externa
         paddingBottom: 20,
         paddingHorizontal: 20,
@@ -919,7 +965,7 @@ const styles = StyleSheet.create({
     headerFriendName: {
         fontSize: 22,
         fontWeight: "bold",
-        color: "#fff",
+        color: "#333",
         marginBottom: 4,
     },
     headerBalanceSummary: {
@@ -1116,5 +1162,42 @@ const styles = StyleSheet.create({
         color: '#FFFFFF',
         fontSize: 16, // Ajustado
         fontWeight: '500',
+    },
+    warningColorText: { // Cor para o email e ícone de alerta
+        color: '#FFA500', // Laranja/Amarelo para aviso
+    },
+    inviteButton: {
+        marginTop: 10,
+        paddingVertical: 8,
+        paddingHorizontal: 16,
+        backgroundColor: 'rgba(0, 0, 0, 0)',
+        borderRadius: 20,
+        borderColor: '#333',
+        borderWidth: 1,
+    },
+    inviteButtonText: {
+        color: '#333',
+        fontSize: 14,
+        fontWeight: '500',
+    },
+    noExpensesContent: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 20,
+        marginTop: 50,
+    },
+        noExpensesTitle: {
+        fontSize: 20,
+        fontWeight: '600',
+        color: '#333',
+        marginBottom: 8,
+        textAlign: 'center',
+    },
+        noExpensesSubtitle: {
+        fontSize: 15,
+        color: '#666',
+        textAlign: 'center',
+        lineHeight: 22,
     },
 });

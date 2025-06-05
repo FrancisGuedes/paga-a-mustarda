@@ -34,7 +34,8 @@ interface Friend {
   updated_at?: string | null;
   phone_number?: string | null;
   email?: string | null;
-  is_settled?: boolean; 
+  is_settled?: boolean;
+  registered_user_id?: string | null;
 }
 
 export const FRIENDS_STORAGE_KEY_PREFIX = 'paga_a_mostarda_friends_cache_';
@@ -293,12 +294,20 @@ export default function FriendsScreen() {
     return (
       <TouchableOpacity
         style={styles.friendItemContainer}
-        onPress={() => router.push({ pathname: `/friend/[friendId]`, 
-          params: { friendId: item.id, name: item.name } 
-        })}
+        onPress={() =>
+          router.push({
+            pathname: `/friend/[friendId]`,
+            params: {
+              friendId: item.id,
+              name: item.name,
+              registeredUserId: item.registered_user_id,
+              friendEmail: item.email
+            },
+          })
+        }
       >
         {/* TODO: o pathname para o amigo tem de ser mudado para pathname: `/friend/${item.id}` */}
-        {item.avatarUrl && item.avatarUrl !== 'placeholder' ? (
+        {item.avatarUrl && item.avatarUrl !== "placeholder" ? (
           <Image source={{ uri: item.avatarUrl }} style={styles.avatar} />
         ) : (
           <View style={styles.avatar} />
@@ -307,7 +316,9 @@ export default function FriendsScreen() {
           <Text style={styles.friendName}>{item.name}</Text>
         </View>
         <View style={styles.friendBalance}>
-          <Text style={[styles.balanceText, balanceColorStyle]}>{balanceDescription}</Text>
+          <Text style={[styles.balanceText, balanceColorStyle]}>
+            {balanceDescription}
+          </Text>
         </View>
       </TouchableOpacity>
     );
@@ -416,7 +427,78 @@ export default function FriendsScreen() {
           </View>
         )}
 
-        <FlatList
+        {/* VALIDAR SE ESTA TUDO OK CASO CONTRARIO ELIMINAR E DESCOMENTAR O DE BAIXO */}
+        {friends.length > 0 ? (
+          <>
+            <FlatList
+              data={friends}
+              renderItem={renderFriendItem}
+              keyExtractor={(item) => item.id.toString()}
+              ListEmptyComponent={
+                !error ? (
+                  <View style={styles.emptyListContainer}>
+                    <Text style={styles.emptyListText}>
+                      Todos os saldos pendentes estão acertados!
+                    </Text>
+                    {/* Se quiser mostrar amigos com saldo zero aqui, ajuste a lógica de friendsWithPendingBalance */}
+                  </View>
+                ) : null
+              }
+              scrollEnabled={false}
+            />
+            {error && friendsWithPendingBalance.length === 0 && (
+              <View style={styles.emptyListContainer}>
+                <Text style={styles.errorText}>{`Erro: ${error}`}</Text>
+                <Button
+                  title="Tentar Novamente"
+                  onPress={() =>
+                    loadFriends({ forceNetwork: true, isPullToRefresh: true })
+                  }
+                />
+              </View>
+            )}
+            {/* A secção de 'contas liquidadas' é mostrada APENAS se houver amigos */}
+            {settledFriendsCount > 0 && (
+              <View style={styles.settledOptionsOuterContainer}>
+                <View style={styles.settledOptionsInnerContainer}>
+                  <Text style={styles.settledInfoText}>
+                    Ocultar amigos com quem tem as contas acertadas há mais de 7
+                    dias
+                  </Text>
+                  <TouchableOpacity style={styles.showSettledButton}>
+                    <Text style={styles.showSettledButtonText}>
+                      Mostrar {settledFriendsCount} amigo(s) com contas
+                      liquidadas
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+          </>
+        ) : (
+          !initialLoading &&
+          !error && ( // Se não há amigos, não está a carregar e não há erro
+            <View style={styles.noFriendsContainer}>
+              {/* O avatar e nome do utilizador foram removidos daqui, conforme o seu pedido */}
+              <TouchableOpacity
+                style={styles.bigAddFriendButton}
+                onPress={() => router.push("/add-friend-flow")}
+              >
+                <Ionicons
+                  name="people-outline"
+                  size={20}
+                  color="#007AFF"
+                  style={{ marginRight: 8 }}
+                />
+                <Text style={styles.bigAddFriendButtonText}>
+                  Adicionar amigos
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )
+        )}
+
+        {/* <FlatList
           data={friends}
           renderItem={renderFriendItem}
           keyExtractor={(item) => item.id.toString()}
@@ -436,7 +518,7 @@ export default function FriendsScreen() {
             </View>
           }
           scrollEnabled={false}
-        />
+        /> */}
 
         {/* // TODO: Componente para mostrar amigos com contas liquidadas
           para isso é necessario ter estados na tabela amigos
@@ -470,7 +552,7 @@ export default function FriendsScreen() {
 
 const styles = StyleSheet.create({
   screenContainer: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: "#FFFFFF",
   },
   scrollViewStyle: {
     flex: 1,
@@ -479,12 +561,12 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingHorizontal: 16,
     paddingBottom: 10,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: "#FFFFFF",
   },
   headerIcon: {
     padding: 8,
@@ -493,148 +575,171 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   addFriendsButtonText: {
-    fontSize: 17, 
-    color: '#007AFF',
-    fontWeight: '500',
+    fontSize: 17,
+    color: "#007AFF",
+    fontWeight: "500",
   },
   summaryContainer: {
     paddingHorizontal: 16,
-    paddingVertical: 20, 
-    backgroundColor: '#FFFFFF',
+    paddingVertical: 20,
+    backgroundColor: "#FFFFFF",
     borderBottomWidth: 1,
     borderTopWidth: 1,
-    borderColor: '#F0F0F0',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    borderColor: "#F0F0F0",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   summaryText: {
     fontSize: 18,
-    fontWeight: '500',
-    color: '#1C1C1E',
+    fontWeight: "500",
+    color: "#1C1C1E",
     flexShrink: 1,
   },
   filterIcon: {
     padding: 8,
   },
   friendItemContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     paddingVertical: 12,
     paddingHorizontal: 16,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: "#FFFFFF",
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    borderBottomColor: "#F0F0F0",
   },
   avatar: {
-    width: 48, 
-    height: 48, 
-    borderRadius: 24, 
-    marginRight: 16, 
-    backgroundColor: '#E9E9EF',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    marginRight: 16,
+    backgroundColor: "#E9E9EF",
   },
   friendInfo: {
     flex: 1,
   },
   friendName: {
-    fontSize: 17, 
+    fontSize: 17,
     fontWeight: "500",
-    color: '#1C1C1E',
+    color: "#1C1C1E",
   },
   friendBalance: {
-    alignItems: 'flex-end',
+    alignItems: "flex-end",
   },
   balanceText: {
-    fontSize: 16, 
-    fontWeight: '400',
+    fontSize: 16,
+    fontWeight: "400",
   },
   friendOwesMeColor: {
-    color: '#34C759',
+    color: "#34C759",
   },
   iOweFriendColor: {
-    color: '#FF3B30',
+    color: "#FF3B30",
   },
   settledColor: {
-    color: '#8E8E93',
+    color: "#8E8E93",
   },
   emptyListText: {
-    textAlign: 'center',
+    textAlign: "center",
     marginTop: 50,
     marginBottom: 20,
     fontSize: 16,
-    color: '#8E8E93',
+    color: "#8E8E93",
     paddingHorizontal: 20,
   },
   settledOptionsOuterContainer: {
     paddingHorizontal: 16,
     paddingVertical: 20,
     borderTopWidth: 1,
-    borderColor: '#F0F0F0',
-    backgroundColor: '#FFFFFF',
+    borderColor: "#F0F0F0",
+    backgroundColor: "#FFFFFF",
   },
   settledOptionsInnerContainer: {
     // Estilos se necessário
   },
   settledInfoText: {
     fontSize: 13,
-    color: '#6D6D72',
-    textAlign: 'center',
+    color: "#6D6D72",
+    textAlign: "center",
     marginBottom: 15,
     lineHeight: 18,
   },
   showSettledButton: {
     borderWidth: 1.5,
-    borderColor: '#007AFF',
+    borderColor: "#007AFF",
     borderRadius: 10,
     paddingVertical: 12,
     paddingHorizontal: 15,
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
   },
   showSettledButtonText: {
-    color: '#007AFF',
+    color: "#007AFF",
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#F7F7F7',
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#F7F7F7",
   },
   listLoadingContainer: {
     paddingVertical: 20,
-    alignItems: 'center',
+    alignItems: "center",
   },
   listLoadingText: {
     marginTop: 10,
     fontSize: 14,
-    color: '#555',
+    color: "#555",
   },
   errorText: {
-    color: 'red',
+    color: "red",
     fontSize: 16,
     marginBottom: 10,
-    textAlign: 'center',
+    textAlign: "center",
   },
   emptyListContainer: {
-    alignItems: 'center',
+    alignItems: "center",
     marginTop: 40,
     marginBottom: 20,
     paddingHorizontal: 20,
   },
   backgroundLoadingContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
     paddingVertical: 10,
   },
   backgroundLoadingText: {
     marginLeft: 10,
     fontSize: 14,
-    color: '#555',
+    color: "#555",
   },
-  avatarSkeleton: { // Estilo específico para o avatar no skeleton
+  avatarSkeleton: {
+    // Estilo específico para o avatar no skeleton
     marginRight: 16,
+  },
+  noFriendsContainer: {
+    //flex: 1, // Ocupa o espaço disponível
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    marginTop: "20%", // Ajuste para subir um pouco, compensando o header/sumário
+  },
+  bigAddFriendButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 25,
+    borderWidth: 1.5,
+    borderColor: "#007AFF",
+    borderRadius: 8,
+  },
+  bigAddFriendButtonText: {
+    color: "#007AFF",
+    fontSize: 17,
+    fontWeight: "500",
   },
 });

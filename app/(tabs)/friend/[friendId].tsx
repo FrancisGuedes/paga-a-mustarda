@@ -598,7 +598,6 @@ export default function FriendExpensesScreen() {
     (routeRegisteredFriendEmail || 'Contacto não registado');
     let balanceSummaryColor = styles.settledColorText;
 
-
     if (isFriendRegistered && expenses.length > 0) {
         if (balanceWithFriend > 0) { 
             balanceSummaryText = `${friendFirstName} deve-lhe ${balanceWithFriend.toFixed(2)} €`; 
@@ -741,7 +740,7 @@ export default function FriendExpensesScreen() {
                 )}
                 {/* </ImageBackground> */}
                 <TouchableOpacity style={styles.settingsIcon}>
-                    <Feather name="settings" size={24} color="#fff" />
+                    <Feather name="settings" size={24} color="#333" />
                 </TouchableOpacity>
             </View>
 
@@ -969,7 +968,7 @@ const styles = StyleSheet.create({
         marginBottom: 4,
     },
     headerBalanceSummary: {
-        fontSize: 16,
+        fontSize: 14,
         color: "#fff", // A cor específica (verde/vermelho) será aplicada via style inline
     },
     positiveBalanceColor: { color: "#E0F8E0" }, // Um verde claro para texto branco
@@ -980,6 +979,7 @@ const styles = StyleSheet.create({
         top: 15, // Ajustar conforme o padding da safe area
         right: 15,
         padding: 5,
+        color: "#333",
     },
     actionButtonsContainer: {
         flexDirection: "row",

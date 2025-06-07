@@ -98,6 +98,8 @@ export default function ExpenseDetailScreen() {
         expenseId: string;
         friendId?: string;
         friendName?: string;
+        routeRegisteredFriendUserId?: string;
+        routeRegisteredFriendEmail?: string;
     }>();
     const { auth } = useAuth();
     const [expense, setExpense] = useState<Expense | null>(null);
@@ -290,10 +292,17 @@ export default function ExpenseDetailScreen() {
     };
 
     const handleBackPress = useCallback(() => {
+        console.log("[handleBackPress] routeRegisteredFriendUserId:", params.routeRegisteredFriendUserId);
+        console.log("[handleBackPress] routeRegisteredFriendEmail:", params.routeRegisteredFriendEmail);
         if (router.canGoBack() && params.friendId && params.friendName) {
             router.replace({
                 pathname: "/(tabs)/friend/[friendId]",
-                params: { friendId: params.friendId, name: params.friendName }
+                params: { 
+                    friendId: params.friendId, 
+                    name: params.friendName,
+                    registeredUserId: params.routeRegisteredFriendUserId,
+                    friendEmail: params.routeRegisteredFriendEmail
+                }
             });
         } else {
             router.back();

@@ -264,7 +264,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const bodyPayload = {
         toEmail: email,
         toName: displayName || email.split('@')[0] || 'Utilizador',
-        name: displayName,
+        nome: displayName,
         link: "https://www.google.com", // TODO: alterar para APP
       };
 

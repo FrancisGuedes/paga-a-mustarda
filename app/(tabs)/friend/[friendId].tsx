@@ -237,6 +237,7 @@ export default function FriendExpensesScreen() {
     const [skeletonItemCount, setSkeletonItemCount] = useState(DEFAULT_SKELETON_COUNT); 
     // Determina se o amigo é um utilizador registado da app
     const isFriendRegistered = !!routeRegisteredFriendUserId; 
+    const friendEmail = routeRegisteredFriendEmail;
 
     //console.log(`Despesas com ${friendName}:`, expenses);
 
@@ -356,13 +357,15 @@ export default function FriendExpensesScreen() {
             let isActive = true;
             const checkSignalAndLoad = async () => {
                     if (routeFriendId && friendName) {
-                    console.log(
-                        `[FriendExpensesScreen] Focado. Definindo amigo atual: ID=${routeFriendId}, Nome=${friendName}`
-                    );
+                    console.log(`[FriendExpensesScreen] Focado. Definindo amigo atual: ID=${routeFriendId}, Nome=${friendName}`);
+                    console.log(`[FriendExpensesScreen] Focado. FRIEND_USER_ID=${routeRegisteredFriendUserId}`);
+                    console.log(`[FriendExpensesScreen] Focado. EMAIL=${friendEmail}`);
                     setCurrentFriend({
                         id: routeFriendId,
                         name: friendName,
                         avatarUrl: routeFriendAvatarUrl,
+                        registered_user_id: routeRegisteredFriendUserId,
+                        email: routeRegisteredFriendEmail
                     });
                 }
 
@@ -417,6 +420,8 @@ export default function FriendExpensesScreen() {
             loadExpenses,
             expenses.length,
             getExpensesStorageKey,
+            routeRegisteredFriendUserId,
+            routeRegisteredFriendEmail
         ])
         //}, [auth.user, auth.isLoading, routeFriendId, loadExpenses, getExpensesStorageKey, expenses.length])
     );
@@ -585,6 +590,49 @@ export default function FriendExpensesScreen() {
         }
     };
 
+    const handleResendInvite = useCallback(async () => {
+        if (!friendEmail) {
+            Alert.alert("Sem Email", "Não é possível reenviar o convite porque este amigo não tem um email associado.");
+            return;
+        }
+        Alert.alert(
+            "Reenviar Convite",
+            `Reenviar convite para ${friendEmail}?`,
+            [
+                {
+                    text: "Cancelar",
+                    style: "cancel",
+                },
+                {
+                    text: "OK",
+                    onPress: async () => {
+                        try {
+                            const inviterName = auth.user?.displayName || auth.user?.email || "Um amigo";
+                            // console.log("[handleResendInvite] friendEmail:", friendEmail);
+                            // console.log("[handleResendInvite] inviterName:", inviterName);
+                            const bodyPayload = {
+                                toEmail: friendEmail,
+                                toName: inviterName || friendEmail?.split('@')[0] || 'Utilizador',
+                                nome: inviterName,
+                                link: "https://www.google.com", // TODO: alterar para APP
+                            };
+                            const { data, error } = await supabase.functions
+                                .invoke('resend-invitation-friend-email', {
+                                    body: bodyPayload,
+                            });
+                            if (error) throw error;
+                            //Alert.alert("Sucesso", "O convite foi reenviado!");
+                            //console.log("Resposta da Edge Function:", data);
+                        } catch (error: any) {
+                            console.error("Erro ao invocar a Edge Function 'invite-friend-email':", error);
+                            Alert.alert("Erro", `Não foi possível reenviar o convite: ${error.message}`);
+                        }
+                    }
+                }
+            ]
+        );
+    }, [auth.user, friendEmail, friendName]);
+
     // Calcula o saldo com este amigo específico usando user_share
     const balanceWithFriend = expenses.reduce(
         (acc, expense) => acc + expense.user_share,
@@ -593,6 +641,7 @@ export default function FriendExpensesScreen() {
 
     //let balanceSummaryText = `Contas acertadas com ${friendFirstName}.`;
 
+    //console.log("[LISTA DESPESAS] routeRegisteredFriendEmail:", routeRegisteredFriendEmail);
     let balanceSummaryText = isFriendRegistered ? 
     (expenses.length === 0 ? `Ainda não há despesas com ${friendFirstName}.` : `Contas acertadas com ${friendFirstName}.`) : 
     (routeRegisteredFriendEmail || 'Contacto não registado');
@@ -734,7 +783,9 @@ export default function FriendExpensesScreen() {
                     
                 </View>
                 {!isFriendRegistered && (
-                    <TouchableOpacity style={styles.inviteButton} onPress={() => Alert.alert("Reenviar Convite", `Reenviar convite para ${routeRegisteredFriendEmail || friendName}?`)}>
+                    <TouchableOpacity 
+                        style={styles.inviteButton} 
+                        onPress={handleResendInvite}>
                         <Text style={styles.inviteButtonText}>Reenviar convite</Text>
                     </TouchableOpacity>
                 )}
@@ -859,12 +910,15 @@ export default function FriendExpensesScreen() {
                                                 swipeableRefs.current[currentlyOpenSwipeableId.current]?.close();
                                             }
                                             router.push({
-                                                pathname: "/friend/expense/[expenseId]", // Navega para a sub-rota de detalhe
-                                                params: { 
+                                                pathname:
+                                                    "/friend/expense/[expenseId]", // Navega para a sub-rota de detalhe
+                                                params: {
                                                     expenseId: expense.id,
                                                     friendId: routeFriendId,
                                                     friendName: friendName,
-                                                }
+                                                    routeRegisteredFriendUserId: routeRegisteredFriendUserId,
+                                                    routeRegisteredFriendEmail: routeRegisteredFriendEmail
+                                                },
                                             });
                                         }}
                                     >

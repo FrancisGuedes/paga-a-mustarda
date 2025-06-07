@@ -111,15 +111,13 @@ const handleConclude = useCallback(async () => {
                     auth.user?.displayName ||
                     auth.user?.email ||
                     "O seu amigo";
-                // Obtenha o avatar de quem convida (opcional)
-                const inviterAvatarUrl =
-                    auth.user?.avatar_url || undefined;
-
+                const contactEmail = contact.email;
+                
                 const bodyPayload = {
-                    friendEmail: contact.email,
-                    friendName: contact.name,
-                    inviterName: inviterName,
-                    inviterAvatarUrl: inviterAvatarUrl, // Opcional, para o {{inviterAvatarUrl}} no template
+                    toEmail: contactEmail,
+                    toName: contact.name || contactEmail?.split('@')[0] || 'Utilizador',
+                    nome: inviterName,
+                    link: "https://www.google.com", // TODO: alterar para APP
                 };
 
                 console.log(

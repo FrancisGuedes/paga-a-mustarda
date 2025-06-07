@@ -4,6 +4,8 @@ interface FriendDetails {
     id: string;
     name: string;
     avatarUrl?: string | null;
+    registered_user_id?: string | null;
+    email?: string | null;
 }
 
 interface FriendContextProps {

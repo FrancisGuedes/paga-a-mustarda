@@ -23,6 +23,7 @@ import { supabase } from "../config/supabase"; // Ajuste o caminho
 import { useAuth } from "../context/AuthContext"; // Ajuste o caminho
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { addFriendsReciprocally } from "@/services/friendService";
+import { invokeEdgeFunction } from "@/services/edgeFunctionEmailService";
 // Reutiliza a interface ContactItem de AddFriendFlowScreen
 // Idealmente, esta interface estaria num ficheiro de tipos partilhado
 interface ContactItem {
@@ -89,9 +90,37 @@ const handleConclude = useCallback(async () => {
     // Chama a nova função do serviço
     const result = await addFriendsReciprocally(contactsToVerify, auth.user);
 
+    // Se for sucesso é enviado email para cada contacto
     if (result.success) {
-        // TODO: Enviar email para o amigo
+        for (const contact of contactsToVerify) {
+            if (contact.email.trim() !== undefined && contact.email.trim() !== "") {
+                const inviterName = auth.user?.displayName || 
+                auth.user?.email || 
+                "O seu amigo";
+                const contactEmail = contact.email;
+
+                const bodyPayload = {
+                    toEmail: contactEmail,
+                    toName: contact.name || contactEmail?.split("@")[0] || "Utilizador",
+                    nome: inviterName,
+                    link: "https://www.google.com", // TODO: alterar para APP
+                };
+
+                const { success, data, error } = await invokeEdgeFunction(
+                    'invitation-email', 
+                    bodyPayload
+                );
         
+                if (success) {
+                    console.log(`Email enviado com sucesso para ${contact.email}. Resposta:`, data);
+                    // Aqui pode usar data.message se a sua função o retornar
+                } else {
+                    console.error(`Falha ao enviar email para ${contact.email}. Status: ${error?.status}, Mensagem: ${error?.message}`);
+                    // Pode querer mostrar uma notificação discreta de que o convite para este amigo falhou
+                }
+            }
+        }
+    
         Alert.alert("Sucesso!", `${result.successCount} amigo(s) adicionado(s).`);
         // Limpar cache de amigos no ecrã principal para recarregar
         const friendsListCacheKey = `${FRIENDS_STORAGE_KEY_PREFIX}${auth.user.id}`;
@@ -188,7 +217,7 @@ const handleConclude_Z = useCallback(async () => {
                 }
             }
         }
-        /* [END] Envio de emails */
+        // [END] Envio de emails
 
         router.replace("/(tabs)");
     } catch (error: any) {

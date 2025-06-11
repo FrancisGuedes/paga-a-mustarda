@@ -26,7 +26,7 @@ export const invokeEdgeFunction = async (
         functionName: string,
         body: { [key: string]: any }
     ): Promise<InvokeResult> => {
-        console.log(`A invocar a Edge Function '${functionName}' com o payload:`, body);
+        //console.log(`[invokeEdgeFunction] A invocar a Edge Function '${functionName}' com o payload:`, body);
 
     try {
         // Tenta invocar a função
@@ -40,7 +40,7 @@ export const invokeEdgeFunction = async (
         }
 
         // Se a chamada for bem-sucedida (status 2xx), retorna os dados
-        console.log(`Função '${functionName}' invocada com sucesso. Resposta:`, data);
+        //console.log(`[invokeEdgeFunction] Função '${functionName}' invocada com sucesso. Resposta:`, data);
         return { 
             success: true, 
             data, 

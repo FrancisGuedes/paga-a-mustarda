@@ -112,7 +112,7 @@ const handleConclude = useCallback(async () => {
                 );
         
                 if (success) {
-                    console.log(`Email enviado com sucesso para ${contact.email}. Resposta:`, data);
+                    //console.log(`Email enviado com sucesso para ${contact.email}. Resposta:`, data);
                     // Aqui pode usar data.message se a sua função o retornar
                 } else {
                     console.error(`Falha ao enviar email para ${contact.email}. Status: ${error?.status}, Mensagem: ${error?.message}`);

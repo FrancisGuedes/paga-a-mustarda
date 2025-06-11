@@ -32,14 +32,14 @@ const AuthContext = createContext<AuthContextProps | undefined>(undefined);
 const USER_SESSION_KEY = 'paga_a_mostarda_mock_user_session';
 
 // Função para converter User do Supabase para o nosso formato
-const mapSupabaseUserToUser = (supabaseUser: SupabaseUser): User => {
+export const mapSupabaseUserToUser = (supabaseUser: SupabaseUser): User => {
   return {
     id: supabaseUser.id,
     email: supabaseUser.email || null,
-    displayName:  supabaseUser.user_metadata?.display_name || 
-                  supabaseUser.user_metadata?.full_name || 
-                  supabaseUser.email?.split('@')[0] || 
-                  'Utilizador',
+    displayName: supabaseUser.user_metadata?.display_name ||
+      supabaseUser.user_metadata?.full_name ||
+      supabaseUser.email?.split('@')[0] ||
+      'Utilizador',
     avatar_url: supabaseUser.user_metadata?.avatar_url || null,
   };
 };
@@ -231,7 +231,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           },
         },
       });
-      console.log("[register] Resultado do registo data:", data);
+      //console.log("[REGISTER] Resultado do registo data:", data);
 
       if (error) {
         const errorMsg =
@@ -260,10 +260,53 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         Alert.alert("Registo", "Conta registada com sucesso!");
       }
 
+      if (data.user) {
+        // [START] Registo de user na tabela PROFILES
+        const { error: insertError1 } = await supabase
+          .from("profiles")
+          .insert({
+            id: data.user.id,
+            full_name: displayName,
+            email: email,
+            phone_number: data.user.phone,
+          });
+        // [END] Registo de user na tabela FRIENDS
+
+        if (insertError1) throw insertError1;
+        //console.log(`[REGISTER] Tabela profiles inserida para ${displayName}.`);
+
+        // [START] Registo de user na tabela FRIENDS: A -> B
+        /* const bodyPayload = {
+          email: data.user.email, // O email do amigo que está a ser convidado
+          registered_user_id: data.user.id,
+        }; */
+
+        //console.log("[REGISTER] invocar link-invitations");
+        const { data: functionResponse, error: functionError } =
+          await supabase
+            .functions
+            .invoke("link-invitations")
+            .catch((err) => {
+              console.error(
+                `Erro ao invocar função 'link-invitations' para ${email}:`,
+                err
+              );
+              throw new Error(
+                `Erro ao invocar função 'link-invitations' para ${email}: ${err.message}`
+              );
+          });
+        //console.log("[REGISTER] response:", functionResponse);
+        if (functionError) {
+          console.error("Erro ao tentar associar convites de amigos:", functionError.message);
+          // TODO: NAO enviar email!
+        }
+        // [END] Registo de user na tabela FRIENDS
+      }
+
       // [START] Envio de email de boas-vindas
       const bodyPayload = {
         toEmail: email,
-        toName: displayName || email.split('@')[0] || 'Utilizador',
+        toName: displayName || email.split("@")[0] || "Utilizador",
         nome: displayName,
         link: "https://www.google.com", // TODO: alterar para APP
       };
@@ -287,7 +330,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           );
         });
       // [END] Envio de email de boas-vindas
-
     } catch (error) {
       setAuthInternal((prev) => ({ ...prev, isLoading: false }));
       throw error;

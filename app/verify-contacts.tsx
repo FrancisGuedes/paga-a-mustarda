@@ -22,6 +22,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { supabase } from "../config/supabase"; // Ajuste o caminho
 import { useAuth } from "../context/AuthContext"; // Ajuste o caminho
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { addFriendsReciprocally } from "@/services/friendService";
 // Reutiliza a interface ContactItem de AddFriendFlowScreen
 // Idealmente, esta interface estaria num ficheiro de tipos partilhado
 interface ContactItem {
@@ -76,6 +77,36 @@ useEffect(() => {
 }, [params.selectedContacts]);
 
 const handleConclude = useCallback(async () => {
+    if (!auth.user || contactsToVerify.length === 0) {
+        Alert.alert(
+        "Erro",
+        "Nenhum contacto para adicionar ou utilizador não autenticado."
+        );
+        return;
+    }
+
+    console.log("[handleConclude] Contactos para adicionar:", contactsToVerify);
+    // Chama a nova função do serviço
+    const result = await addFriendsReciprocally(contactsToVerify, auth.user);
+
+    if (result.success) {
+        // TODO: Enviar email para o amigo
+        
+        Alert.alert("Sucesso!", `${result.successCount} amigo(s) adicionado(s).`);
+        // Limpar cache de amigos no ecrã principal para recarregar
+        const friendsListCacheKey = `${FRIENDS_STORAGE_KEY_PREFIX}${auth.user.id}`;
+        await AsyncStorage.removeItem(friendsListCacheKey);
+
+        router.replace("/(tabs)");
+    } else {
+        Alert.alert(
+        "Operação Incompleta",
+        `${result.failedCount} amigo(s) não puderam ser adicionados. Por favor, tente novamente.`
+        );
+    }
+}, [auth.user, contactsToVerify, router]);
+
+const handleConclude_Z = useCallback(async () => {
     if (!auth.user?.id || contactsToVerify.length === 0) {
         Alert.alert(
         "Erro",

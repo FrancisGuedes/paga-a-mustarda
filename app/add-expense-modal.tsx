@@ -43,7 +43,20 @@ type AddExpenseModalScreenParams = {
     userShare?: string;   // Vem como string
     categoryIcon?: keyof typeof Ionicons.glyphMap;
     splitOptionId?: string;
+    registeredFriendId?: string;
 }
+
+type ExpensePayload = {
+    user_id: string,
+    friend_id: string | undefined,
+    description: string,
+    total_amount: any,
+    user_share: any,
+    date: string,
+    paid_by_user: boolean,
+    split_option_id: string,
+    updated_at: string,
+};
 
 export const EXPENSE_ADDED_OR_MODIFIED_SIGNAL_KEY = 'paga_a_mostarda_expense_added_or_modified_signal';
 
@@ -280,6 +293,216 @@ export default function AddExpenseModalScreen() {
         }
     }, [router, params.friendId, params.friendName]);
 
+    const createUnidirectionalExpense = useCallback(async (expensePayload: any, calculatedUserShare: number) => {
+        console.log("[createUnidirectionalExpense] A inserir nova despesa...");
+        await supabase
+            .from("expenses")
+            .insert([expensePayload])
+            .single()
+            .throwOnError();
+
+        if (selectedFriend?.id) {
+            const { data: friendData, error: friendFetchError } = await supabase
+                .from("friends")
+                .select("balance")
+                .eq("user_id", auth.user?.id)
+                .eq("id", selectedFriend.id)
+                .single();
+            if (friendFetchError && friendFetchError.code !== "PGRST116") throw friendFetchError;
+
+            const currentFriendBalance = friendData?.balance || 0;
+            const newFriendBalance = currentFriendBalance + calculatedUserShare;
+
+            await supabase
+                .from("friends")
+                .update({
+                    balance: newFriendBalance,
+                    updated_at: new Date().toISOString(),
+                })
+                .eq("user_id", auth.user?.id)
+                .eq("id", selectedFriend.id)
+                .throwOnError();
+        }
+    }, [auth.user, selectedFriend]); // Dependências para criar uma despesa
+
+    const handleEditExistingExpense = useCallback(async (expensePayload: any, calculatedUserShare: number) => {
+        console.log("[handleUpdateExistingExpense] A editar despesa existente:", editingExpenseId);
+        await supabase
+            .from("expenses")
+            .update(expensePayload)
+            .eq("id", editingExpenseId)
+            .eq("user_id", auth.user?.id) // Garante que só o dono pode editar
+            .throwOnError();
+
+        if (selectedFriend?.id && originalExpenseUserShare !== null) {
+            const { data: friendData, error: friendFetchError } = await supabase
+                .from("friends")
+                .select("balance")
+                .eq("user_id", auth.user?.id)
+                .eq("id", selectedFriend.id)
+                .single();
+            if (friendFetchError && friendFetchError.code !== "PGRST116") throw friendFetchError;
+
+            const currentFriendBalance = friendData?.balance || 0;
+            // Reverte o impacto antigo e aplica o novo
+            const newFriendBalance = currentFriendBalance - originalExpenseUserShare + calculatedUserShare;
+
+            await supabase
+                .from("friends")
+                .update({
+                    balance: newFriendBalance,
+                    updated_at: new Date().toISOString(),
+                })
+                .eq("user_id", auth.user?.id)
+                .eq("id", selectedFriend.id)
+                .throwOnError();
+        }
+    }, [auth.user, selectedFriend, editingExpenseId, originalExpenseUserShare]);
+
+    const addNewExpense = async (expenseData: ExpensePayload, calculatedUserShare: number) => {
+        // Verificar se o amigo está registado
+        const { data: friendData } = await supabase
+            .from('friends')
+            .select('id, balance, registered_user_id')
+            .eq('user_id', auth.user?.id)
+            .eq('id', params.friendId)
+            .single();
+    
+        const isRegistered = friendData?.registered_user_id !== null;
+    
+        if(isRegistered) {
+            // Amigo registado → criar 2 entradas
+            await createBidirectionalExpense(expenseData, friendData);
+        } else {
+            // Amigo não registado → criar apenas 1 entrada
+            await createUnidirectionalExpense(expenseData, calculatedUserShare);
+        }
+    };
+
+    const createBidirectionalExpense = async (
+        expenseFriendData: ExpensePayload, 
+        friendData: {
+            registered_user_id: any;
+            id: any;
+        } | null
+    ) => {
+        // Encontrar a amizade recíproca (B → A)
+        const { data: reciprocalFriend } = await supabase
+            .from('friends')
+            .select('id')
+            .eq('user_id', friendData?.registered_user_id)
+            .eq('registered_user_id', auth.user?.id)
+            .single();
+
+        console.log("[createBidirectionalExpense] A inserir 2 novas despesas...");
+        
+        /* 
+        // Preparar as duas despesas
+        const expenses = [
+          // Despesa A → B (perspetiva do A)
+            {
+                user_id: auth.user?.id,
+                friend_id: friendData?.id,
+                description: expenseFriendData.description,
+                total_amount: expenseFriendData.total_amount,
+                date: expenseFriendData.date,
+                user_share: expenseFriendData.user_share,
+                paid_by_user: expenseFriendData.paid_by_user,
+                split_option_id: expenseFriendData.split_option_id,
+                updated_at: new Date().toISOString(),
+            },
+            // Despesa B → A (perspetiva do B, valores invertidos)
+            {
+                user_id: friendData?.registered_user_id,
+                friend_id: reciprocalFriend?.id,
+                description: expenseFriendData.description,
+                total_amount: expenseFriendData.total_amount,
+                date: expenseFriendData.date,
+                user_share: -expenseFriendData.user_share, // Valor invertido
+                paid_by_user: !expenseFriendData.paid_by_user, // Invertido
+                split_option_id: expenseFriendData.split_option_id,
+                updated_at: new Date().toISOString(),
+            }
+        ];
+
+        // Inserir ambas as despesas
+        console.log("[createBidirectionalExpense] Inserir ambas as despesas:", expenses);
+        const { error } = await supabase
+            .from('expenses')
+            .insert(expenses);
+        if (error) throw error; */
+
+        // Atualizar ambos os saldos
+        console.log("[createBidirectionalExpense] A chamar edge function...");
+
+        // Chamar a Edge Function
+        const { data: response, error } = await supabase
+            .functions
+            .invoke('create-bidirectional-expense', {
+                body: {
+                expenseData: {
+                    description: expenseFriendData.description,
+                    total_amount: expenseFriendData.total_amount,
+                    date: expenseFriendData.date,
+                    user_share: expenseFriendData.user_share,
+                    paid_by_user: expenseFriendData.paid_by_user,
+                    split_option_id: expenseFriendData.split_option_id,
+                    updated_at: new Date().toISOString(),
+                },
+                friendData: {
+                    id: friendData?.id,
+                    registered_user_id: friendData?.registered_user_id,
+                },
+                reciprocalFriendId: reciprocalFriend?.id,
+            }
+        });
+
+        if (error) throw error;
+
+        console.log("[createBidirectionalExpense] response from supabase", response);
+
+        //await updateBothBalances(friendData?.id, reciprocalFriend?.id, expenseFriendData);
+    };
+
+    const updateBothBalances = async (friendAToB_id: string, friendBToA_id: string, expenseFriendData: any) => {
+    
+        
+        const {data: balanceData, error} = await supabase.from('friends')
+            .select('balance')
+            .eq('id', friendAToB_id)
+            .single();
+
+        console.log("[createBidirectionalExpense] Buscar balanço A atual:", balanceData);
+
+         // Atualizar saldo A → B
+        const currentFriendBalance = expenseFriendData?.balance || 0;
+        const newFriendBalance = currentFriendBalance + expenseFriendData.userShare;
+
+        console.log("[createBidirectionalExpense] balanço A atualizar:", newFriendBalance);
+        const { error: errorA } = await supabase
+            .from('friends')
+            .update({ 
+                balance: newFriendBalance,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', friendAToB_id);
+
+        // Atualizar saldo B → A (valor invertido)
+        // O saldo de B com A é simplesmente a soma invertida dos user_shares de A
+        const newBalanceForB = newFriendBalance.reduce((acc: number, exp: { user_share: number; })=> acc - exp.user_share, 0);
+        console.log("[createBidirectionalExpense] balanço B atualizar:", newBalanceForB);
+
+        const { error: errorB } = await supabase
+            .from('friends')
+            .update({ 
+                balance: newBalanceForB,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', friendBToA_id);
+
+        if (errorA || errorB) throw new Error('Erro ao atualizar saldos');
+    };
+
     const handleSaveExpense = useCallback(async () => {
         console.log("[handleSaveExpense] A iniciar a guardar despesa...");
         if (
@@ -317,6 +540,7 @@ export default function AddExpenseModalScreen() {
             setIsSaving(false);
             return;
         }
+
         try {
             const expensePayload = {
                 user_id: auth.user.id,
@@ -332,45 +556,24 @@ export default function AddExpenseModalScreen() {
             console.log("[handleSaveExpense] A guardar despesa com payload:", expensePayload);
             console.log("[handleSaveExpense] editingExpenseId:", editingExpenseId);
 
-            // EDIÇÃO DE DESPESA
             if (editingExpenseId) {
-                const v = await supabase
+                handleEditExistingExpense(expensePayload, userShare);
+            } else {
+                //createUnidirectionalExpense(expensePayload, userShare);
+                addNewExpense(expensePayload, userShare);
+            }
+
+            /* // EDIÇÃO DE DESPESA
+            if (editingExpenseId) {
+                const { data: updateData} = await supabase
                     .from("expenses")
                     .update(expensePayload)
                     .eq("id", editingExpenseId)
                     .select()
                     .throwOnError();
-                console.log("[handleSaveExpense] updated:", v);
-            if (selectedFriend?.id && originalExpenseUserShare !== null) {
-                const { data: friendData, error: friendFetchError } = await supabase
-                    .from("friends")
-                    .select("balance")
-                    .eq("user_id", auth.user.id)
-                    .eq("id", selectedFriend.id)
-                    .single();
-                if (friendFetchError && friendFetchError.code !== "PGRST116")
-                throw friendFetchError;
-                const currentFriendBalance = friendData?.balance || 0;
-                const newFriendBalance =
-                currentFriendBalance - originalExpenseUserShare + userShare;
-                await supabase
-                    .from("friends")
-                    .update({
-                        balance: newFriendBalance,
-                        updated_at: new Date().toISOString(),
-                    })
-                    .eq("user_id", auth.user.id)
-                    .eq("id", selectedFriend.id)
-                    .throwOnError();
-            }
-            } // NOVA DESPESA
-            else {
-            await supabase
-                .from("expenses")
-                .insert([expensePayload])
-                .single()
-                .throwOnError();
-                if (selectedFriend?.id) {
+                console.log("[handleSaveExpense] updated:", updateData);
+
+                if (selectedFriend?.id && originalExpenseUserShare !== null) {
                     const { data: friendData, error: friendFetchError } = await supabase
                         .from("friends")
                         .select("balance")
@@ -379,8 +582,11 @@ export default function AddExpenseModalScreen() {
                         .single();
                     if (friendFetchError && friendFetchError.code !== "PGRST116")
                     throw friendFetchError;
+
                     const currentFriendBalance = friendData?.balance || 0;
-                    const newFriendBalance = currentFriendBalance + userShare;
+                    const newFriendBalance =
+                    currentFriendBalance - originalExpenseUserShare + userShare;
+
                     await supabase
                         .from("friends")
                         .update({
@@ -391,7 +597,38 @@ export default function AddExpenseModalScreen() {
                         .eq("id", selectedFriend.id)
                         .throwOnError();
                 }
-            }
+            } // NOVA DESPESA
+            else {
+                await supabase
+                    .from("expenses")
+                    .insert([expensePayload])
+                    .single()
+                    .throwOnError();
+
+                if (selectedFriend?.id) {
+                    const { data: friendData, error: friendFetchError } = await supabase
+                        .from("friends")
+                        .select("balance")
+                        .eq("user_id", auth.user.id)
+                        .eq("id", selectedFriend.id)
+                        .single();
+                    if (friendFetchError && friendFetchError.code !== "PGRST116")
+                    throw friendFetchError;
+
+                    const currentFriendBalance = friendData?.balance || 0;
+                    const newFriendBalance = currentFriendBalance + userShare;
+
+                    await supabase
+                        .from("friends")
+                        .update({
+                            balance: newFriendBalance,
+                            updated_at: new Date().toISOString(),
+                        })
+                        .eq("user_id", auth.user.id)
+                        .eq("id", selectedFriend.id)
+                        .throwOnError();
+                }
+            } */
             //Alert.alert("Sucesso",editingExpenseId ? "Despesa atualizada!" : "Despesa adicionada!");
             // Sinaliza que uma despesa foi adicionada/modificada
             await AsyncStorage.setItem(EXPENSE_ADDED_OR_MODIFIED_SIGNAL_KEY,"true");

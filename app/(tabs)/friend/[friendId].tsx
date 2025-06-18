@@ -1025,8 +1025,8 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: "#fff", // A cor específica (verde/vermelho) será aplicada via style inline
     },
-    positiveBalanceColor: { color: "#E0F8E0" }, // Um verde claro para texto branco
-    negativeBalanceColor: { color: "#FFE0E0" }, // Um vermelho claro para texto branco
+    positiveBalanceColor: { color: "#27ae60"}, // Um verde claro para texto branco
+    negativeBalanceColor: { color: "#e74c3c" }, // Um vermelho claro para texto branco
     settledColorText: { color: "#D0E0FF" }, // Um azul claro para texto branco
     settingsIcon: {
         position: "absolute",

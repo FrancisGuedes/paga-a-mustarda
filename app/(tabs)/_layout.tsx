@@ -117,6 +117,7 @@ export default function TabLayout() {
                 params: {
                   friendId: currentFriend?.id,
                   friendName: currentFriend?.name,
+                  registeredFriendId: currentFriend?.registered_user_id,
                 },
               });
             } else if (

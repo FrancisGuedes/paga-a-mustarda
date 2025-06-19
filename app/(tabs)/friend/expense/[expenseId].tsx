@@ -133,6 +133,7 @@ export default function ExpenseDetailScreen() {
 
             if (supabaseError) throw supabaseError;
             if (!data) throw new Error("Despesa não encontrada.");
+            console.log(`[ExpenseDetail] Despesa encontrada: ${data.id}, amount: ${data.total_amount}, user share: ${data.user_share}`);
 
             setExpense(data as Expense);
         } catch (e: any) {
@@ -252,7 +253,12 @@ export default function ExpenseDetailScreen() {
             if (params.friendId && params.friendName) {
                 router.replace({
                     pathname: "/(tabs)/friend/[friendId]",
-                    params: { friendId: params.friendId, name: params.friendName }
+                    params: { 
+                        friendId: params.friendId,
+                        name: params.friendName,
+                        registeredUserId: params.routeRegisteredFriendUserId,
+                        friendEmail: params.routeRegisteredFriendEmail
+                    }
                 });
             } else {
                 router.replace('/(tabs)');
@@ -277,7 +283,13 @@ export default function ExpenseDetailScreen() {
                     style: "cancel",
                     onPress: () => router.replace({
                         pathname: "/(tabs)/friend/expense/[expenseId]",
-                        params: { expenseId: params.expenseId, friendId: params.friendId, name: params.friendName }
+                        params: { 
+                            expenseId: params.expenseId, 
+                            friendId: params.friendId, 
+                            name: params.friendName,
+                            registeredUserId: params.routeRegisteredFriendUserId,
+                            friendEmail: params.routeRegisteredFriendEmail
+                        }
                     })
                 },
                 {
@@ -328,6 +340,8 @@ export default function ExpenseDetailScreen() {
             friendId: params.friendId, // ID do amigo da tabela 'friends'
             friendName: params.friendName,
             categoryIcon: expense.category_icon || undefined,
+            registeredUserId: params.routeRegisteredFriendUserId,
+            friendEmail: params.routeRegisteredFriendEmail
         }
         });
     };

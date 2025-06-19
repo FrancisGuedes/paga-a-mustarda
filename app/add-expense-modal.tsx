@@ -44,6 +44,8 @@ type AddExpenseModalScreenParams = {
     categoryIcon?: keyof typeof Ionicons.glyphMap;
     splitOptionId?: string;
     registeredFriendId?: string;
+    registeredUserId?: string;
+    friendEmail?: string;
 }
 
 type ExpensePayload = {
@@ -272,15 +274,20 @@ export default function AddExpenseModalScreen() {
     const handleCustomBack = useCallback(() => {
         // Ecrã EDITAR: lógica para voltar ao ecrã detalhe da despesa
         if (params.editingExpenseId && params.friendId && params.friendName) {
-            console.log(
-                `[AddExpenseModalScreen] A voltar para o detalhe da despesa: /friend/expense/${params.editingExpenseId}`
+            console.log(`[AddExpenseModalScreen][handleCustomBack] A voltar para o detalhe da despesa: /friend/expense/${params.editingExpenseId}`);
+            console.log(`[AddExpenseModalScreen][handleCustomBack] 
+                routeRegisteredFriendUserId: ${params.registeredUserId}, 
+                routeRegisteredFriendEmail: ${params.friendEmail}`
             );
+
             router.replace({
                 pathname: "/(tabs)/friend/expense/[expenseId]",
                 params: {
                     expenseId: params.editingExpenseId, // O ID da despesa para o ecrã de detalhe
                     friendId: params.friendId,
                     friendName: params.friendName,
+                    routeRegisteredFriendUserId: params.registeredUserId,
+                    routeRegisteredFriendEmail: params.friendEmail,
                 },
             });
         // Ecrã ADICIONAR: lógica para voltar ao ecrã lista de despesas do amigo

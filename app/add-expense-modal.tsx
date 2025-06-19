@@ -325,7 +325,7 @@ export default function AddExpenseModalScreen() {
         }
     }, [auth.user, selectedFriend]); // Dependências para criar uma despesa
 
-    const handleEditExistingExpense = useCallback(async (expensePayload: any, calculatedUserShare: number) => {
+    /* const handleEditExistingExpense = useCallback(async (expensePayload: any, calculatedUserShare: number) => {
         console.log("[handleUpdateExistingExpense] A editar despesa existente:", editingExpenseId);
         await supabase
             .from("expenses")
@@ -357,7 +357,7 @@ export default function AddExpenseModalScreen() {
                 .eq("id", selectedFriend.id)
                 .throwOnError();
         }
-    }, [auth.user, selectedFriend, editingExpenseId, originalExpenseUserShare]);
+    }, [auth.user, selectedFriend, editingExpenseId, originalExpenseUserShare]); */
 
     const addNewExpense = async (expenseData: ExpensePayload, calculatedUserShare: number) => {
         // Verificar se o amigo está registado
@@ -396,41 +396,7 @@ export default function AddExpenseModalScreen() {
 
         console.log("[createBidirectionalExpense] A inserir 2 novas despesas...");
         
-        /* 
-        // Preparar as duas despesas
-        const expenses = [
-          // Despesa A → B (perspetiva do A)
-            {
-                user_id: auth.user?.id,
-                friend_id: friendData?.id,
-                description: expenseFriendData.description,
-                total_amount: expenseFriendData.total_amount,
-                date: expenseFriendData.date,
-                user_share: expenseFriendData.user_share,
-                paid_by_user: expenseFriendData.paid_by_user,
-                split_option_id: expenseFriendData.split_option_id,
-                updated_at: new Date().toISOString(),
-            },
-            // Despesa B → A (perspetiva do B, valores invertidos)
-            {
-                user_id: friendData?.registered_user_id,
-                friend_id: reciprocalFriend?.id,
-                description: expenseFriendData.description,
-                total_amount: expenseFriendData.total_amount,
-                date: expenseFriendData.date,
-                user_share: -expenseFriendData.user_share, // Valor invertido
-                paid_by_user: !expenseFriendData.paid_by_user, // Invertido
-                split_option_id: expenseFriendData.split_option_id,
-                updated_at: new Date().toISOString(),
-            }
-        ];
-
-        // Inserir ambas as despesas
-        console.log("[createBidirectionalExpense] Inserir ambas as despesas:", expenses);
-        const { error } = await supabase
-            .from('expenses')
-            .insert(expenses);
-        if (error) throw error; */
+    
 
         // Atualizar ambos os saldos
         console.log("[createBidirectionalExpense] A chamar edge function...");
@@ -503,6 +469,127 @@ export default function AddExpenseModalScreen() {
         if (errorA || errorB) throw new Error('Erro ao atualizar saldos');
     }; */
 
+    const editExistingExpense = useCallback(async (expensePayload: any, calculatedUserShare: number) => {
+        console.log("[editExistingExpense] INICIO");
+        console.log("[editExistingExpense] A editar despesa existente:", editingExpenseId);
+        
+        if (!selectedFriend?.id || originalExpenseUserShare === null) {
+            throw new Error("Dados da despesa incompletos");
+        }
+
+        // Verificar se o amigo está registado
+        const { data: friendData, error: friendDataError } = await supabase
+            .from('friends')
+            .select('id, registered_user_id')
+            .eq('user_id', auth.user?.id)
+            .eq('id', selectedFriend.id)
+            .single();
+
+        if (friendDataError) throw friendDataError;
+
+        const isRegistered = friendData?.registered_user_id !== null;
+        console.log("[editExistingExpense] Esta registado:", isRegistered);
+
+        if (isRegistered) {
+            await editBidirectionalExpense(expensePayload, calculatedUserShare, friendData);
+        } else {
+            await editUnidirectionalExpense(expensePayload, calculatedUserShare);
+        }
+    }, [auth.user, selectedFriend, editingExpenseId, originalExpenseUserShare]);
+
+    const editBidirectionalExpense = useCallback(
+        async (expensePayload: any, 
+            calculatedUserShare: number, 
+            friendData: { id: any; registered_user_id: any }) => {
+        console.log("[editExistingExpense][editBidirectionalExpense] Amigo registado - usando Edge Function");
+
+        // Encontrar amizade recíproca
+        const { data: reciprocalFriend } = await supabase
+        .from("friends")
+        .select("id")
+        .eq("user_id", friendData.registered_user_id)
+        .eq("registered_user_id", auth.user?.id)
+        .single();
+        console.log("[editExistingExpense][editBidirectionalExpense] amizade recirpoca encontrada: ", reciprocalFriend);
+
+        // Chamar Edge Function para edição bidirecional
+        const { data, error } = await supabase.functions.invoke(
+            "edit-bidirectional-expense",
+            {
+                body: {
+                    editingExpenseId,
+                    expensePayload: {
+                        description: expensePayload.description,
+                        total_amount: expensePayload.total_amount,
+                        date: expensePayload.date,
+                        user_share: expensePayload.user_share,
+                        paid_by_user: expensePayload.paid_by_user,
+                        split_option_id: expensePayload.split_option_id,
+                        updated_at: new Date().toISOString(),
+                    },
+                    calculatedUserShare,
+                    originalExpenseUserShare,
+                    friendData: {
+                        id: friendData.id,
+                        registered_user_id: friendData.registered_user_id,
+                    },
+                    reciprocalFriendId: reciprocalFriend?.id,
+                },
+            }
+        );
+
+        if (error) throw error;
+        console.log("[editExistingExpense][editBidirectionalExpense] Edição bidirecional concluída:", data);
+    },[auth.user, editingExpenseId, originalExpenseUserShare]);
+
+    const editUnidirectionalExpense = useCallback(
+        async (expensePayload: any, calculatedUserShare: number) => {
+            console.log("[editExistingExpense][editUnidirectionalExpense] Amigo não registado - fluxo unidirecional");
+
+            // Atualizar despesa original
+            await supabase
+            .from("expenses")
+            .update(expensePayload)
+            .eq("id", editingExpenseId)
+            .eq("user_id", auth.user?.id)
+            .throwOnError();
+
+            // Buscar saldo atual do amigo
+            const { data: friendBalanceData, error: friendFetchError } =
+            await supabase
+                .from("friends")
+                .select("balance")
+                .eq("user_id", auth.user?.id)
+                .eq("id", selectedFriend?.id)
+                .single();
+
+            if (friendFetchError && friendFetchError.code !== "PGRST116") {
+                throw friendFetchError;
+            }
+
+            // Calcular e atualizar novo saldo
+            const currentFriendBalance = friendBalanceData?.balance || 0;
+            if (originalExpenseUserShare === null) {
+                throw new Error("originalExpenseUserShare is null");
+            }
+            const newFriendBalance =
+            currentFriendBalance - originalExpenseUserShare + calculatedUserShare;
+
+            await supabase
+            .from("friends")
+            .update({
+                balance: newFriendBalance,
+                updated_at: new Date().toISOString(),
+            })
+            .eq("user_id", auth.user?.id)
+            .eq("id", selectedFriend?.id)
+            .throwOnError();
+
+            console.log("[editExistingExpense][editUnidirectionalExpense] Saldo atualizado:", newFriendBalance);
+        },
+        [auth.user, selectedFriend, editingExpenseId, originalExpenseUserShare]
+    );
+
     const handleSaveExpense = useCallback(async () => {
         console.log("[handleSaveExpense] A iniciar a guardar despesa...");
         if (
@@ -557,9 +644,9 @@ export default function AddExpenseModalScreen() {
             console.log("[handleSaveExpense] editingExpenseId:", editingExpenseId);
 
             if (editingExpenseId) {
-                handleEditExistingExpense(expensePayload, userShare);
+                await editExistingExpense(expensePayload, userShare);
             } else {
-                addNewExpense(expensePayload, userShare);
+                await addNewExpense(expensePayload, userShare);
             }
             await AsyncStorage.setItem(EXPENSE_ADDED_OR_MODIFIED_SIGNAL_KEY,"true");
 

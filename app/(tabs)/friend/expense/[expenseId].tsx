@@ -11,6 +11,7 @@ import { capitalizeFirstLetter } from '@/utils/tabsUtils';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FRIENDS_STORAGE_KEY_PREFIX } from '../..';
 import { EXPENSE_ADDED_OR_MODIFIED_SIGNAL_KEY } from '@/app/add-expense-modal';
+import { ExpenseDeleteService } from '@/services/ExpenseDeleteService';
 
 const DEFAULT_USER_AVATAR = 'https://via.placeholder.com/80/007AFF/FFFFFF?Text=EU';
 const DEFAULT_FRIEND_AVATAR_DETAIL = 'https://via.placeholder.com/80/CEDAEF/000000?Text=';
@@ -182,12 +183,12 @@ export default function ExpenseDetailScreen() {
     const performDeleteAndReload = useCallback(async () => {
         console.log("A eliminar despesa ID:", params?.expenseId);
         
-        if (!expense?.id) return;
+        if (!expense?.id || !auth.user?.id || !params.friendId) return;
         
         setIsDeleting(true);
 
         try {
-            // 1. Eliminar a despesa da tabela 'expenses'
+            /* // 1. Eliminar a despesa da tabela 'expenses'
             const { error: deleteError } = await supabase
                 .from('expenses')
                 .delete()
@@ -201,12 +202,6 @@ export default function ExpenseDetailScreen() {
             }
 
             // 2. Atualizar o 'balance' na tabela 'friends'
-            /* const expensesBeforeDelete = expense;
-            setExpense(prevExpense => prevExpense?.filter(exp => exp.id !== expenseId));
-
-            const updatedExpenses = expense.filter(exp => exp.id !== expenseId);
-            setExpense(updatedExpenses); */
-
             if (params.friendId) {
                 const { data: friendData, error: friendFetchError } = await supabase
                     .from('friends')
@@ -232,6 +227,18 @@ export default function ExpenseDetailScreen() {
 
                 if (friendUpdateError) throw friendUpdateError;
                 console.log("[ExpenseDetail] Saldo do amigo atualizado para:", newFriendBalance);
+            } */
+
+            const result = await ExpenseDeleteService.deleteExpense({
+                expenseId: expense.id,
+                expenseUserShare: expense.user_share,
+                friendId: params.friendId,
+                userId: auth.user?.id,
+            });
+
+            if (!result.success) {
+                Alert.alert("Erro",result.error || "Não foi possível apagar a despesa.");
+                return;
             }
 
             // 3. Invalidar caches para forçar recarregamento nos ecrãs anteriores

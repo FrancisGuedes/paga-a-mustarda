@@ -37,6 +37,7 @@ import Reanimated, {
 } from 'react-native-reanimated';
 import { EXPENSE_DELETED_SIGNAL_KEY } from "./expense/[expenseId]";
 import { EXPENSE_ADDED_OR_MODIFIED_SIGNAL_KEY } from "@/app/add-expense-modal";
+import { ExpenseDeleteService } from "@/services/ExpenseDeleteService";
 
 // Interface para Despesa
 export interface Expense {
@@ -454,15 +455,19 @@ export default function FriendExpensesScreen() {
     };
 
     const performDeleteAndReload = async (expenseId: string, userShareToReverse: number) => {
+        if (!auth.user?.id || !routeFriendId) {
+            Alert.alert("Erro", "Dados de utilizador em falta.");
+            return false;
+        }
+        
         setIsDeleting(true);
 
         console.log("A eliminar despesa ID:", expenseId);
         // Fechar o swipeable antes de eliminar, se ainda não estiver fechado
         swipeableRefs.current[expenseId]?.close();
-
         setSkeletonItemCount(expenses.length > 1 ? expenses.length : DEFAULT_SKELETON_COUNT); 
 
-        const { error: deleteError } = await supabase
+        /* const { error: deleteError } = await supabase
             .from('expenses')
             .delete()
             .eq('id', expenseId);
@@ -472,16 +477,10 @@ export default function FriendExpensesScreen() {
             console.error("Erro ao eliminar despesa:", deleteError);
             setIsDeleting(false);
             return;
-        }
-
-        const expensesBeforeDelete = expenses;
-        setExpenses(prevExpenses => prevExpenses.filter(exp => exp.id !== expenseId));
-
-        const updatedExpenses = expenses.filter(exp => exp.id !== expenseId);
-        setExpenses(updatedExpenses);
+        } */
 
         try {
-            if (auth.user?.id && routeFriendId) {
+            /* if (auth.user?.id && routeFriendId) {
                 const { data: friendData, error: friendFetchError } = await supabase
                     .from('friends')
                     .select('balance')
@@ -504,7 +503,25 @@ export default function FriendExpensesScreen() {
                 if (friendUpdateError) throw friendUpdateError;
 
                 console.log("Saldo do amigo atualizado após eliminação para:", newFriendBalance);
+            } */
+            const result = await ExpenseDeleteService.deleteExpense({
+                expenseId,
+                expenseUserShare: userShareToReverse,
+                friendId: routeFriendId,
+                userId: auth.user.id,
+            });
+
+            if (!result.success) {
+                Alert.alert("Erro", result.error || "Não foi possível eliminar a despesa.");
+                return false;
             }
+
+            const expensesBeforeDelete = expenses;
+            setExpenses(prevExpenses => prevExpenses.filter(exp => exp.id !== expenseId));
+
+            const updatedExpenses = expenses.filter(exp => exp.id !== expenseId);
+            setExpenses(updatedExpenses);
+
             const storageKey = getExpensesStorageKey();
             if (storageKey) {
                 const updatedExpensesForCache = expensesBeforeDelete.filter(exp => exp.id !== expenseId);
